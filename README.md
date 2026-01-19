@@ -4,31 +4,18 @@ MagicBlock Ephemeral Rollups development skill for [Claude Code](https://claude.
 
 ## Installation
 
-### Option 1: Install Script (Recommended)
+### Quick Install
 
 ```bash
-git clone https://github.com/sporicle/claude.git /tmp/magicblock-skill
-cd /tmp/magicblock-skill
+npx add-skill https://github.com/magicblock-labs/magicblock-dev-skill
+```
+
+### Manual Install
+
+```bash
+git clone https://github.com/magicblock-labs/magicblock-dev-skill
+cd skill
 ./install.sh
-rm -rf /tmp/magicblock-skill
-```
-
-This installs the skill to `~/.claude/skills/magicblock`, making it available in all projects.
-
-#### Install Options
-
-```bash
-./install.sh                    # Install to ~/.claude/skills/magicblock (default)
-./install.sh --project          # Install to .claude/skills/magicblock (current project only)
-./install.sh --path /custom/path # Install to custom path
-```
-
-### Option 2: Manual Installation
-
-```bash
-git clone https://github.com/sporicle/claude.git /tmp/magicblock-skill
-cp -r /tmp/magicblock-skill/skill ~/.claude/skills/magicblock
-rm -rf /tmp/magicblock-skill
 ```
 
 ## What This Skill Covers
