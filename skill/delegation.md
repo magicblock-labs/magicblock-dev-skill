@@ -136,7 +136,7 @@ No macros needed. Pinocchio uses explicit account slicing and manual instruction
 ### Delegate Instruction
 
 ```rust
-pub fn delegate(
+pub fn process_delegate(
     _program_id: &Address,
     accounts: &[AccountView],
     bump: u8,
@@ -176,7 +176,7 @@ pub fn delegate(
 ### Undelegate Instruction
 
 ```rust
-pub fn undelegate(
+pub fn process_undelegate(
     _program_id: &Address,
     accounts: &[AccountView],
 ) -> ProgramResult {
@@ -199,7 +199,7 @@ pub fn undelegate(
 }
 
 // REQUIRED: Handle the undelegation callback from the delegation program
-pub fn undelegation_callback(
+pub fn process_undelegation_callback(
     program_id: &Address,
     accounts: &[AccountView],
     ix_data: &[u8],
@@ -215,7 +215,7 @@ pub fn undelegation_callback(
 ### Commit Without Undelegating
 
 ```rust
-pub fn commit(
+pub fn process_commit(
     _program_id: &Address,
     accounts: &[AccountView],
 ) -> ProgramResult {
