@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, and fast transaction throughput on Solana.
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, and TypeScript integration. Supports both Anchor and Pinocchio frameworks. Use for high-performance gaming, real-time apps, and fast transaction throughput on Solana.
 user-invocable: true
 ---
 
@@ -34,10 +34,9 @@ Use this Skill when the user asks for:
 
 ## Default stack decisions (opinionated)
 
-1) **Programs: Anchor with ephemeral-rollups-sdk**
-   - Use `ephemeral-rollups-sdk` with Anchor features
-   - Apply `#[ephemeral]` macro before `#[program]`
-   - Use `#[delegate]` and `#[commit]` macros for delegation contexts
+1) **Programs: Anchor or Pinocchio with ephemeral-rollups SDK**
+   - **Anchor**: Use `ephemeral-rollups-sdk` with `#[ephemeral]`, `#[delegate]`, and `#[commit]` macros
+   - **Pinocchio**: Use `ephemeral-rollups-pinocchio` with explicit account slicing and manual dispatch
 
 2) **Dual Connections**
    - Base layer connection for initialization and delegation
@@ -68,6 +67,7 @@ Always be explicit about:
 - PDA seeds matching between delegate call and account definition
 - Using `skipPreflight: true` for ER transactions
 - Waiting for state propagation after delegate/undelegate
+- Only marking delegated accounts as writable in ER instructions — non-delegated accounts must not be writable
 
 ### 4. Add appropriate features
 - Cranks for recurring automated transactions
