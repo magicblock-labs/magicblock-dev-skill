@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, and fast transaction throughput on Solana.
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, private payments API, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers, and fast transaction throughput on Solana.
 user-invocable: true
 ---
 
@@ -15,6 +15,7 @@ Use this Skill when the user asks for:
 - VRF (Verifiable Random Function) for provable randomness
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
+- Private payments (deposits, transfers, withdrawals via the Payments API)
 
 ## Key Concepts
 
@@ -84,4 +85,5 @@ When you implement changes, provide:
 - TypeScript frontend setup: [typescript-setup.md](typescript-setup.md)
 - Cranks (scheduled tasks): [cranks.md](cranks.md)
 - VRF (randomness): [vrf.md](vrf.md)
+- Private Payments API: [private-payments.md](private-payments.md)
 - Reference links & versions: [resources.md](resources.md)

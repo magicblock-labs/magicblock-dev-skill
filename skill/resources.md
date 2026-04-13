@@ -61,3 +61,4 @@ ephemeral-vrf-sdk = { version = "0.2.1", features = ["anchor"] }
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
 - [Ephemeral VRF SDK (Rust)](https://crates.io/crates/ephemeral-vrf-sdk)
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)
+- [Private Payments API Reference](https://payments.magicblock.app/reference)

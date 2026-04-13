@@ -27,6 +27,7 @@ cd skill
 - VRF (Verifiable Random Function) for provable randomness
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
+- Private payments (deposits, transfers, withdrawals via the Payments API)
 
 ## Usage
 
@@ -48,6 +49,7 @@ skill/
 ├── typescript-setup.md   # TypeScript frontend setup
 ├── cranks.md             # Scheduled tasks (cranks)
 ├── vrf.md                # Verifiable Random Function
+├── private-payments.md   # Private Payments API reference
 └── resources.md          # Environment vars, versions, links
 ```
 
