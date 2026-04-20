@@ -1,0 +1,4 @@
+interface:
+  display_name: "MagicBlock"
+  short_description: "MagicBlock Ephemeral Rollups patterns for Solana apps"
+  default_prompt: "Use the magicblock skill to help integrate MagicBlock Ephemeral Rollups into this Solana project, including delegation flows, transaction routing, cranks, VRF, or private payments."

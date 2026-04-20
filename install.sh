@@ -1,39 +1,92 @@
 #!/bin/bash
 
-# MagicBlock Dev Skill Installer for Claude Code
-# Usage: ./install.sh [--project | --path <path>]
+# MagicBlock Dev Skill Installer for Claude Code and Codex
+# Usage: ./install.sh [--claude] [--codex] [--project] [--path <path>]
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_NAME="magicblock"
 SOURCE_DIR="$SCRIPT_DIR/skill"
+CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 
-# Default to personal installation
-INSTALL_PATH="$HOME/.claude/skills/$SKILL_NAME"
+INSTALL_CLAUDE=false
+INSTALL_CODEX=false
+PROJECT_INSTALL=false
+CUSTOM_PATH=""
+TARGET_SELECTED=false
 
-# Parse arguments
+print_help() {
+    echo "MagicBlock Dev Skill Installer"
+    echo ""
+    echo "Usage: ./install.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --claude      Install for Claude Code only"
+    echo "  --codex       Install for Codex only"
+    echo "  --project     Install into the current project"
+    echo "  --path PATH   Install to a custom path"
+    echo "  -h, --help    Show this help message"
+    echo ""
+    echo "Defaults:"
+    echo "  No target flags: install to both personal locations"
+    echo "  Claude Code:   $CLAUDE_HOME/skills/$SKILL_NAME"
+    echo "  Codex:         $CODEX_HOME/skills/$SKILL_NAME"
+}
+
+install_to_path() {
+    local install_path="$1"
+    local label="$2"
+
+    if [[ -e "$install_path" && ! -d "$install_path" ]]; then
+        echo "Error: '$install_path' exists and is not a directory"
+        return 1
+    fi
+
+    if [ -d "$install_path" ]; then
+        echo "Warning: '$install_path' already exists"
+        read -r -p "Overwrite $label? (y/N) " reply
+        if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+            echo "Skipped $label"
+            return 1
+        fi
+        rm -rf "$install_path"
+    fi
+
+    mkdir -p "$install_path"
+    cp -R "$SOURCE_DIR"/. "$install_path"/
+
+    echo "Installed $label to: $install_path"
+    return 0
+}
+
 while [[ $# -gt 0 ]]; do
-    case $1 in
+    case "$1" in
+        --claude)
+            INSTALL_CLAUDE=true
+            TARGET_SELECTED=true
+            shift
+            ;;
+        --codex)
+            INSTALL_CODEX=true
+            TARGET_SELECTED=true
+            shift
+            ;;
         --project)
-            INSTALL_PATH=".claude/skills/$SKILL_NAME"
+            PROJECT_INSTALL=true
             shift
             ;;
         --path)
-            INSTALL_PATH="$2"
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --path requires a value"
+                exit 1
+            fi
+            CUSTOM_PATH="$2"
             shift 2
             ;;
         -h|--help)
-            echo "MagicBlock Dev Skill Installer"
-            echo ""
-            echo "Usage: ./install.sh [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --project     Install to current project (.claude/skills/$SKILL_NAME)"
-            echo "  --path PATH   Install to custom path"
-            echo "  -h, --help    Show this help message"
-            echo ""
-            echo "Default: Install to ~/.claude/skills/$SKILL_NAME"
+            print_help
             exit 0
             ;;
         *)
@@ -44,44 +97,90 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if source directory exists
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "Error: Source directory '$SOURCE_DIR' not found"
     exit 1
 fi
 
-# Check if SKILL.md exists
 if [ ! -f "$SOURCE_DIR/SKILL.md" ]; then
     echo "Error: SKILL.md not found in '$SOURCE_DIR'"
     exit 1
 fi
 
-# Create parent directory if needed
-mkdir -p "$(dirname "$INSTALL_PATH")"
-
-# Check if destination already exists
-if [ -d "$INSTALL_PATH" ]; then
-    echo "Warning: '$INSTALL_PATH' already exists"
-    read -p "Overwrite? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Installation cancelled"
-        exit 0
-    fi
-    rm -rf "$INSTALL_PATH"
+if [[ -n "$CUSTOM_PATH" ]] && { [[ "$TARGET_SELECTED" == true ]] || [[ "$PROJECT_INSTALL" == true ]]; }; then
+    echo "Error: --path cannot be combined with --claude, --codex, or --project"
+    exit 1
 fi
 
-# Copy skill files
+if [[ -n "$CUSTOM_PATH" ]]; then
+    if install_to_path "$CUSTOM_PATH" "custom path"; then
+        echo ""
+        echo "The skill is now available at: $CUSTOM_PATH"
+    else
+        echo ""
+        echo "No targets were installed."
+    fi
+    exit 0
+fi
+
+if [[ "$TARGET_SELECTED" == false ]]; then
+    INSTALL_CLAUDE=true
+    INSTALL_CODEX=true
+fi
+
+CLAUDE_PATH="$CLAUDE_HOME/skills/$SKILL_NAME"
+CODEX_PATH="$CODEX_HOME/skills/$SKILL_NAME"
+
+if [[ "$PROJECT_INSTALL" == true ]]; then
+    CLAUDE_PATH=".claude/skills/$SKILL_NAME"
+    CODEX_PATH=".codex/skills/$SKILL_NAME"
+fi
+
+declare -a INSTALLED_TARGETS=()
+CLAUDE_INSTALLED=false
+CODEX_INSTALLED=false
+
 echo "Installing MagicBlock Dev Skill..."
-cp -r "$SOURCE_DIR" "$INSTALL_PATH"
+
+if [[ "$INSTALL_CLAUDE" == true ]]; then
+    if install_to_path "$CLAUDE_PATH" "Claude Code"; then
+        INSTALLED_TARGETS+=("Claude Code:$CLAUDE_PATH")
+        CLAUDE_INSTALLED=true
+    fi
+fi
+
+if [[ "$INSTALL_CODEX" == true ]]; then
+    if install_to_path "$CODEX_PATH" "Codex"; then
+        INSTALLED_TARGETS+=("Codex:$CODEX_PATH")
+        CODEX_INSTALLED=true
+    fi
+fi
+
+if [[ "${#INSTALLED_TARGETS[@]}" -eq 0 ]]; then
+    echo ""
+    echo "No targets were installed."
+    exit 0
+fi
 
 echo ""
-echo "Successfully installed to: $INSTALL_PATH"
-echo ""
-echo "Installed files:"
-find "$INSTALL_PATH" -type f -name "*.md" | while read -r file; do
-    echo "  - $(basename "$file")"
+echo "Installed targets:"
+for target in "${INSTALLED_TARGETS[@]}"; do
+    echo "  - $target"
 done
+
 echo ""
-echo "The skill is now available in Claude Code."
-echo "Try asking about MagicBlock Ephemeral Rollups or using /magicblock to activate it!"
+echo "Installed Markdown files:"
+for target in "${INSTALLED_TARGETS[@]}"; do
+    path="${target#*:}"
+    find "$path" -type f -name "*.md" | sort | while read -r file; do
+        echo "  - $file"
+    done
+done
+
+echo ""
+if [[ "$CLAUDE_INSTALLED" == true ]]; then
+    echo "Claude Code: ask about MagicBlock Ephemeral Rollups or use /magicblock."
+fi
+if [[ "$CODEX_INSTALLED" == true ]]; then
+    echo "Codex: ask about MagicBlock Ephemeral Rollups or say 'use the magicblock skill'."
+fi

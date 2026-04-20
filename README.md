@@ -1,22 +1,39 @@
 # MagicBlock Dev Skill
 
-MagicBlock Ephemeral Rollups development skill for [Claude Code](https://claude.ai/code).
+MagicBlock Ephemeral Rollups development skill for [Claude Code](https://claude.ai/code) and Codex.
 
 ## Installation
 
-### Quick Install
+### Claude Code quick install
 
 ```bash
 npx add-skill https://github.com/magicblock-labs/magicblock-dev-skill
 ```
 
-### Manual Install
+### Manual install
 
 ```bash
 git clone https://github.com/magicblock-labs/magicblock-dev-skill
-cd skill
+cd magicblock-dev-skill
 ./install.sh
 ```
+
+By default, `./install.sh` installs the skill to both personal skill directories:
+
+- `~/.claude/skills/magicblock`
+- `${CODEX_HOME:-~/.codex}/skills/magicblock`
+
+You can target a specific environment:
+
+```bash
+./install.sh --claude
+./install.sh --codex
+./install.sh --project
+./install.sh --project --codex
+./install.sh --path /custom/path/magicblock
+```
+
+`--project` installs into the current repository under `.claude/skills/magicblock` and/or `.codex/skills/magicblock`.
 
 ## What This Skill Covers
 
@@ -31,7 +48,12 @@ cd skill
 
 ## Usage
 
-The skill activates automatically when you ask about MagicBlock or Ephemeral Rollups. Examples:
+The skill activates automatically when you ask about MagicBlock or Ephemeral Rollups.
+
+- In Claude Code, you can also invoke it directly with `/magicblock`.
+- In Codex, you can mention it explicitly by name, for example: `use the magicblock skill`.
+
+Examples:
 
 ```
 Add delegation hooks to my player account
@@ -45,6 +67,7 @@ Help me integrate MagicBlock into my Anchor program
 ```
 skill/
 ├── SKILL.md              # Main entry point
+├── agents/openai.yaml    # Codex UI metadata
 ├── delegation.md         # Core delegation/undelegation patterns
 ├── typescript-setup.md   # TypeScript frontend setup
 ├── cranks.md             # Scheduled tasks (cranks)
