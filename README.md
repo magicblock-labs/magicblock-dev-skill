@@ -42,9 +42,12 @@ You can target a specific environment:
 - High-performance, low-latency transaction flows
 - Crank scheduling (recurring automated transactions)
 - VRF (Verifiable Random Function) for provable randomness
+- Magic Actions — base-layer instructions chained to an ER commit
+- Topping up delegated accounts with lamports via `lamportsDelegatedTransferIx`
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals via the Payments API)
+- Commit sponsorship and lifting the 10-commit default with `magic_fee_vault`
 
 ## Usage
 
@@ -68,7 +71,9 @@ Help me integrate MagicBlock into my Anchor program
 skill/
 ├── SKILL.md              # Main entry point
 ├── agents/openai.yaml    # Codex UI metadata
-├── delegation.md         # Core delegation/undelegation patterns
+├── delegation.md         # Core delegation/undelegation patterns + commit sponsorship
+├── magic-actions.md      # Post-commit base-layer instructions
+├── lamports-topup.md     # Topping up delegated accounts with lamports
 ├── typescript-setup.md   # TypeScript frontend setup
 ├── cranks.md             # Scheduled tasks (cranks)
 ├── vrf.md                # Verifiable Random Function
