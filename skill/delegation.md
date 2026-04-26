@@ -310,3 +310,87 @@ on the ER and confirm in milliseconds.
 - Don't skip the `#[commit]` macro - Required for undelegate context
 - Don't call deprecated `commit_accounts` / `commit_and_undelegate_accounts` - Use `MagicIntentBundleBuilder` instead
 - Don't update PER permissions on base layer when the permission account is delegated - Update on the ER for sub-second latency
+
+## Commit Sponsorship & Fee Vault
+
+MagicBlock sponsors **10 commits per delegated account by default** — each
+delegation comes with 10 free commits to base layer at no cost. This is
+enough for most short-lived delegations (e.g., a single game session).
+
+When the sponsored quota is exhausted, you have two options:
+
+### Option 1: Re-delegate to refresh the quota
+
+Undelegating and re-delegating the account refreshes the sponsored commit
+allowance. This is the simplest path for flows that already cycle through
+delegation boundaries (session start → play → session end → next session).
+No extra accounts, no extra builder methods — just call `delegate` again.
+
+### Option 2: Pay your own commits via `magic_fee_vault` + delegated fee payer
+
+For long-lived delegations or high commit frequency, attach a
+`magic_fee_vault` to the intent bundle and use a delegated fee payer (a
+PDA payer that signs via seeds). This lifts the sponsored cap — commits
+are paid out of the fee vault instead of MagicBlock's sponsorship pool, so
+there's no per-account quota.
+
+#### Deriving the fee vault PDA
+
+The fee vault is scoped to the validator running the ER. Read the validator
+pubkey out of the delegation record (bytes 8..40) and derive the PDA from
+`[b"magic-fee-vault", validator]` under the ephemeral rollups SDK program ID:
+
+```rust
+// DelegationRecord layout: [8 discriminator][32 authority = validator][...]
+let delegation_record_data = ctx.accounts.delegation_record.try_borrow_data()?;
+require!(
+    delegation_record_data.len() >= 40,
+    crate::errors::MyError::InvalidDelegationRecord
+);
+let validator = Pubkey::try_from(&delegation_record_data[8..40])
+    .map_err(|_| error!(crate::errors::MyError::InvalidDelegationRecord))?;
+drop(delegation_record_data);
+
+let (expected_fee_vault, _) = Pubkey::find_program_address(
+    &[b"magic-fee-vault", validator.as_ref()],
+    &ephemeral_rollups_sdk::id(),
+);
+require_keys_eq!(
+    ctx.accounts.magic_fee_vault.key(),
+    expected_fee_vault,
+    crate::errors::MyError::InvalidDelegationRecord
+);
+```
+
+#### Wiring the fee vault into the intent bundle
+
+The builder exposes `.magic_fee_vault(...)` for this. Pair it with
+`build_and_invoke_signed` when the payer is a PDA. Note that the **payer**
+(who pays for the bundle) and the **committed accounts** (whose state lands
+back on base layer) are independent — they may be the same PDA, or different
+accounts entirely:
+
+```rust
+let payer_seeds: &[&[u8]] = &[MY_PAYER_SEED, owner.as_ref(), &[bump]];
+
+MagicIntentBundleBuilder::new(
+    ctx.accounts.payer.to_account_info(),       // payer (PDA in this example)
+    ctx.accounts.magic_context.to_account_info(),
+    ctx.accounts.magic_program.to_account_info(),
+)
+.magic_fee_vault(ctx.accounts.magic_fee_vault.to_account_info())
+.commit(&[ctx.accounts.my_account.to_account_info()])  // committed account(s) — can differ from payer
+.build_and_invoke_signed(&[payer_seeds])?;
+```
+
+The fee vault must be passed in the outer instruction's accounts context
+as a writable `AccountInfo` (it has lamports debited on each commit).
+
+#### When to pick which option
+
+| Pattern | Recommended path |
+|---|---|
+| Short delegations (<10 commits per session) | Default sponsorship — do nothing |
+| Sessionized flows that re-delegate naturally | Re-delegate to refresh quota |
+| Long-lived or high-frequency commits | `magic_fee_vault` + delegated fee payer |
+| PDA-driven backend dispatching commits on behalf of users | `magic_fee_vault` + delegated fee payer (PDA must be the payer) |

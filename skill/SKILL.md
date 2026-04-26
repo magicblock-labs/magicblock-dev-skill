@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, private payments API, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers, and fast transaction throughput on Solana.
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API, commit sponsorship and fee vault wiring, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers, and fast transaction throughput on Solana.
 user-invocable: true
 ---
 
@@ -13,9 +13,11 @@ Use this Skill when the user asks for:
 - High-performance, low-latency transaction flows
 - Crank scheduling (recurring automated transactions)
 - VRF (Verifiable Random Function) for provable randomness
+- Magic Actions — base-layer instructions chained to an ER commit
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals via the Payments API)
+- Lifting the default 10-commit sponsorship cap with `magic_fee_vault`
 
 ## Key Concepts
 
@@ -26,6 +28,10 @@ Use this Skill when the user asks for:
 **MagicIntentBundleBuilder** (SDK 0.11+) is the current way to schedule commit and commit-and-undelegate intents. The free functions `commit_accounts` and `commit_and_undelegate_accounts` are deprecated.
 
 **Private Ephemeral Rollups (PER)** add a permission account that gates who can interact with a delegated account inside a TEE-backed validator. The recommended pattern is to delegate the permission account itself alongside the permissioned account, so member updates execute on the ER in milliseconds instead of base-layer round-trips.
+
+**Magic Actions** are base-layer instructions scheduled inside an ER transaction via `MagicIntentBundleBuilder.add_post_commit_actions(...)`. They execute atomically once the commit is sealed back to base layer — useful for leaderboard updates, reward distribution, and any side-effect that must run as part of the commit.
+
+**Commit sponsorship**: every delegated account gets 10 free commits to base layer by default. To lift the cap, either re-delegate (refreshes the quota) or attach a `magic_fee_vault` PDA + delegated fee payer to the intent bundle.
 
 **Architecture**:
 ```
@@ -86,6 +92,7 @@ When you implement changes, provide:
 
 ## Progressive disclosure (read when needed)
 - Core delegation patterns: [delegation.md](delegation.md)
+- Magic Actions (post-commit base-layer instructions): [magic-actions.md](magic-actions.md)
 - TypeScript frontend setup: [typescript-setup.md](typescript-setup.md)
 - Cranks (scheduled tasks): [cranks.md](cranks.md)
 - VRF (randomness): [vrf.md](vrf.md)
