@@ -32,7 +32,10 @@ WS_ROUTER_ENDPOINT=wss://devnet-router.magicblock.app/
 ```toml
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.6.5", features = ["anchor", "disable-realloc"] }
+ephemeral-rollups-sdk = { version = "0.11.2", features = ["anchor", "disable-realloc"] }
+
+# Add the access-control feature for Private Ephemeral Rollups (PER)
+# ephemeral-rollups-sdk = { version = "0.11.2", features = ["anchor", "disable-realloc", "access-control"] }
 
 # For cranks
 magicblock-magic-program-api = { version = "0.3.1", default-features = false }
@@ -49,7 +52,7 @@ ephemeral-vrf-sdk = { version = "0.2.1", features = ["anchor"] }
 {
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "^0.6.5"
+    "@magicblock-labs/ephemeral-rollups-sdk": "^0.11.2"
   }
 }
 ```
