@@ -46,7 +46,7 @@ You can target a specific environment:
 - Topping up delegated accounts with lamports via `lamportsDelegatedTransferIx`
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
-- Private payments (deposits, transfers, withdrawals via the Payments API)
+- Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with optional bearer-token auth for private reads)
 - Commit sponsorship and lifting the 10-commit default with `magic_fee_vault`
 
 ## Usage

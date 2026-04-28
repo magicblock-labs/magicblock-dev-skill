@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API, commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers, and fast transaction throughput on Solana.
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, and fast transaction throughput on Solana.
 user-invocable: true
 ---
 
@@ -17,7 +17,7 @@ Use this Skill when the user asks for:
 - Topping up a delegated account's lamports via `lamportsDelegatedTransferIx`
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
-- Private payments (deposits, transfers, withdrawals via the Payments API)
+- Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with optional bearer-token auth for private reads)
 - Lifting the default 10-commit sponsorship cap with `magic_fee_vault`
 
 ## Key Concepts
