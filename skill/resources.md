@@ -9,6 +9,36 @@ ROUTER_ENDPOINT=https://devnet-router.magicblock.app/
 WS_ROUTER_ENDPOINT=wss://devnet-router.magicblock.app/
 ```
 
+## Status JSON API
+
+- Source of truth: `https://status.magicblock.app/api/services`
+- JSON path: `.environments[network].regions[region].servers[fqdn]`
+- Network keys: `mainnet`, `devnet`
+- Region keys: `asia`, `europe`, `usa`, `tee`
+- Service IDs: `er`, `rpc_router`, `pricing_oracle`, `vrf_oracle`
+- Live state: `.live_status[service]` (`true` = Operational, `false` = Down, missing = N/A)
+- Downtime history: `.metrics[service]` minutes per day aligned with `.meta.days` in UTC
+
+Current FQDNs are discoverable from the API. Common entries:
+
+| Network | Region | Status API FQDN |
+|---------|--------|-----------------|
+| Mainnet | Asia | `as.magicblock.app` |
+| Mainnet | Europe | `eu.magicblock.app` |
+| Mainnet | USA | `us.magicblock.app` |
+| Mainnet | TEE | `mainnet-tee-as.magicblock.app` |
+| Devnet | Asia | `devnet-as.magicblock.app` |
+| Devnet | Europe | `devnet-eu.magicblock.app` |
+| Devnet | USA | `devnet-us.magicblock.app` |
+| Devnet | TEE | `devnet-tee-as.magicblock.app` |
+
+Example:
+
+```bash
+curl -sS https://status.magicblock.app/api/services \
+  | jq '.environments.mainnet.regions.asia.servers["as.magicblock.app"].live_status'
+```
+
 ## Version Requirements
 
 | Software | Version |
@@ -60,6 +90,7 @@ ephemeral-vrf-sdk = { version = "0.2.1", features = ["anchor"] }
 ## Documentation Links
 
 - [MagicBlock Documentation](https://docs.magicblock.gg/)
+- [MagicBlock Status API](https://status.magicblock.app/api/services)
 - [MagicBlock Engine Examples](https://github.com/magicblock-labs/magicblock-engine-examples)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
 - [Ephemeral VRF SDK (Rust)](https://crates.io/crates/ephemeral-vrf-sdk)

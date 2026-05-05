@@ -83,11 +83,25 @@ Always be explicit about:
 - Using `skipPreflight: true` for ER transactions
 - Waiting for state propagation after delegate/undelegate
 
-### 4. Add appropriate features
+### 4. Diagnose possible service-side failures
+For unexpected RPC, routing, oracle, or transaction errors that could be service-side:
+- Always fetch current data; do not answer from remembered status. Use the direct JSON API `https://status.magicblock.app/api/services` as the source of truth.
+- Select the same network the code uses: JSON keys are `mainnet` and `devnet`.
+- Match the affected endpoint to the right region/server and service:
+  - Regions are `asia`, `europe`, `usa`, and `tee`.
+  - Service IDs are listed in `.meta.services`; currently `er` (Ephemeral Rollup), `rpc_router`, `pricing_oracle`, and `vrf_oracle`.
+  - Use the server entries under `.environments[network].regions[region].servers`; for mainnet Asia this includes `as.magicblock.app`.
+- Interpret `.live_status[service]`: `true` = Operational, `false` = Down, missing/undefined = N/A.
+- Interpret `.metrics[service]` as downtime minutes per day aligned with `.meta.days` in UTC.
+- When reporting findings, include the network, region, endpoint, service status, and relevant date range. Distinguish live status from historical downtime.
+- For direct ER RPC endpoints, optionally correlate with JSON-RPC `getHealth` or `getVersion`, but do not let a single RPC probe replace the status API.
+
+### 5. Add appropriate features
 - Cranks for recurring automated transactions
 - VRF for verifiable randomness in games/lotteries
+- Private payments API for private transfers and swaps
 
-### 5. Deliverables expectations
+### 6. Deliverables expectations
 When you implement changes, provide:
 - Exact files changed + diffs
 - Commands to install/build/test
