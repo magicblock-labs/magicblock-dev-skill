@@ -6,7 +6,7 @@ Cranks enable automatic, recurring transactions on Ephemeral Rollups without ext
 
 ```toml
 [dependencies]
-magicblock-magic-program-api = { version = "0.3.1", default-features = false }
+magicblock-magic-program-api = { version = "0.10.1", default-features = false }
 bincode = "^1.3"
 sha2 = "0.10"
 ```

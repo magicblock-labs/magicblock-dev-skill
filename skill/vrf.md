@@ -6,7 +6,7 @@ VRF provides provably fair randomness for games, lotteries, and any application 
 
 ```toml
 [dependencies]
-ephemeral-vrf-sdk = { version = "0.2.1", features = ["anchor"] }
+ephemeral-vrf-sdk = { version = "0.3.0", features = ["anchor"] }
 ```
 
 ## VRF Imports

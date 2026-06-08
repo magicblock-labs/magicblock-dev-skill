@@ -49,7 +49,8 @@ Use this Skill when the user asks for:
 ## Default stack decisions (opinionated)
 
 1) **Programs: Anchor with ephemeral-rollups-sdk**
-   - Use `ephemeral-rollups-sdk` with Anchor features
+   - Use `ephemeral-rollups-sdk` (0.14.x) with the `anchor` feature for Anchor 1.0.x
+     programs, or the `anchor-compat` feature for legacy Anchor 0.32.1 programs
    - Apply `#[ephemeral]` macro before `#[program]`
    - Use `#[delegate]` and `#[commit]` macros for delegation contexts
 

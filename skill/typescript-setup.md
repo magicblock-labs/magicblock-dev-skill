@@ -5,8 +5,8 @@
 ```json
 {
   "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "^0.6.5"
+    "@coral-xyz/anchor": "0.32.1",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.14.3"
   }
 }
 ```

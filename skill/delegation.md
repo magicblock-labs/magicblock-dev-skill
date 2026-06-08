@@ -7,11 +7,16 @@
 ```toml
 # Cargo.toml
 [dependencies]
-anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.11.2", features = ["anchor", "disable-realloc"] }
+anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
+ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor"] }
+
+# Anchor line is selected by the SDK feature flag:
+#   "anchor"        → Anchor 1.0.x (current)
+#   "anchor-compat" → Anchor 0.32.1 (legacy programs)
+# Note: "disable-realloc" was removed in SDK 0.14 — remove it when upgrading.
 
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.11.2", features = ["anchor", "disable-realloc", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor", "access-control"] }
 ```
 
 ### Imports
