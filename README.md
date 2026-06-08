@@ -1,6 +1,6 @@
 # MagicBlock Dev Skill
 
-MagicBlock Ephemeral Rollups development skill for AI coding agents. The skill packages MagicBlock-specific patterns (delegation, Magic Actions, cranks, VRF, lamports top-up, commit sponsorship, private payments with swaps, dual-connection architecture) into a reusable workflow that activates automatically when you ask for MagicBlock or Ephemeral Rollups help.
+MagicBlock Ephemeral Rollups development skill for AI coding agents. The skill packages MagicBlock-specific patterns (debugging live ER/delegation failures, delegation, Magic Actions, cranks, VRF, lamports top-up, commit sponsorship, private payments with swaps, dual-connection architecture) into a reusable workflow that activates automatically when you ask for MagicBlock or Ephemeral Rollups help.
 
 ## Installation
 
@@ -68,6 +68,7 @@ Produces:
 ## What This Skill Covers
 
 - MagicBlock Ephemeral Rollups integration
+- Debugging live ER transaction failures, delegation-state mismatches, and router/ER endpoint selection
 - Delegating/undelegating Solana accounts
 - High-performance, low-latency transaction flows
 - Crank scheduling (recurring automated transactions)
@@ -92,6 +93,7 @@ Examples:
 
 ```
 Add delegation hooks to my player account
+Debug why my delegated account gets InvalidWritableAccount
 Change my roll_dice function to use VRF
 Set up a crank that updates game state every 100ms
 Add a Magic Action that updates my onchain leaderboard after every commit

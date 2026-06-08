@@ -24,13 +24,13 @@ import {
 
 ```typescript
 // Base layer connection (Solana devnet/mainnet)
-const baseConnection = new Connection("https://api.devnet.solana.com");
-
-// Ephemeral rollup connection
-const erConnection = new Connection(
-  process.env.EPHEMERAL_PROVIDER_ENDPOINT || "https://devnet.magicblock.app/",
-  { wsEndpoint: process.env.EPHEMERAL_WS_ENDPOINT || "wss://devnet.magicblock.app/" }
+const baseConnection = new Connection(
+  process.env.SOLANA_RPC_ENDPOINT || "https://rpc.magicblock.app/devnet"
 );
+
+// Ephemeral rollup connection. Set this from router getDelegationStatus result.fqdn.
+const erEndpoint = process.env.EPHEMERAL_PROVIDER_ENDPOINT || "https://devnet-as.magicblock.app/";
+const erConnection = new Connection(erEndpoint);
 ```
 
 ## Transaction Flow Summary
@@ -46,13 +46,48 @@ const erConnection = new Connection(
 ## Check Delegation Status
 
 ```typescript
-function checkIsDelegated(accountOwner: PublicKey): boolean {
+type DelegationStatus = {
+  isDelegated: boolean;
+  fqdn?: string;
+  delegationRecord?: {
+    authority: string;
+    owner: string;
+    delegationSlot: number;
+    lamports: number;
+  };
+};
+
+async function getDelegationStatus(account: PublicKey): Promise<DelegationStatus> {
+  const routerEndpoint = process.env.ROUTER_ENDPOINT || "https://devnet-router.magicblock.app/";
+  const response = await fetch(routerEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "getDelegationStatus",
+      params: [account.toBase58()],
+    }),
+  });
+  const body = await response.json();
+  if (body.error) throw new Error(body.error.message);
+  return body.result;
+}
+
+function baseOwnerShowsDelegated(accountOwner: PublicKey): boolean {
   return accountOwner.equals(DELEGATION_PROGRAM_ID);
 }
 
-const accountInfo = await connection.getAccountInfo(pda);
-const isDelegated = checkIsDelegated(accountInfo.owner);
+const delegationStatus = await getDelegationStatus(pda);
+const baseAccountInfo = await baseConnection.getAccountInfo(pda);
+const baseOwnerIsDelegationProgram = baseAccountInfo
+  ? baseOwnerShowsDelegated(baseAccountInfo.owner)
+  : false;
 ```
+
+Router `isDelegated: true` plus base ownership by the delegation program is
+expected. Use `delegationStatus.fqdn` for ER reads and transactions; on that ER,
+the account should be owned by the original program.
 
 ## Delegate Transaction (Base Layer)
 
