@@ -3,10 +3,18 @@
 ## Environment Variables
 
 ```bash
-EPHEMERAL_PROVIDER_ENDPOINT=https://devnet.magicblock.app/
-EPHEMERAL_WS_ENDPOINT=wss://devnet.magicblock.app/
+# Devnet
+SOLANA_RPC_ENDPOINT=https://rpc.magicblock.app/devnet
 ROUTER_ENDPOINT=https://devnet-router.magicblock.app/
 WS_ROUTER_ENDPOINT=wss://devnet-router.magicblock.app/
+
+# Mainnet
+SOLANA_RPC_ENDPOINT=https://rpc.magicblock.app/mainnet
+ROUTER_ENDPOINT=https://router.magicblock.app/
+
+# Set this from router getDelegationStatus result.fqdn for the account.
+EPHEMERAL_PROVIDER_ENDPOINT=https://devnet-as.magicblock.app/
+EPHEMERAL_WS_ENDPOINT=wss://devnet-as.magicblock.app/
 ```
 
 ## Status JSON API
@@ -113,8 +121,11 @@ ephemeral-vrf-sdk = { version = "0.3.0", features = ["anchor"] }
 ## Documentation Links
 
 - [MagicBlock Documentation](https://docs.magicblock.gg/)
+- [Router getDelegationStatus](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/api-reference/er/getDelegationStatus)
 - [MagicBlock Status API](https://status.magicblock.app/api/services)
 - [MagicBlock Engine Examples](https://github.com/magicblock-labs/magicblock-engine-examples)
+- [Ephemeral SPL Token](https://github.com/magicblock-labs/ephemeral-spl-token)
+- [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
 - [Ephemeral VRF SDK (Rust)](https://crates.io/crates/ephemeral-vrf-sdk)
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)

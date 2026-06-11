@@ -1,7 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, and fast transaction throughput on Solana.
-user-invocable: true
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers debugging live ER/delegation failures, router `getDelegationStatus`, delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, and fast transaction throughput on Solana.
 ---
 
 # MagicBlock Ephemeral Rollups Skill
@@ -9,6 +8,7 @@ user-invocable: true
 ## What this Skill is for
 Use this Skill when the user asks for:
 - MagicBlock Ephemeral Rollups integration
+- Debugging live ER transaction failures, delegation-state mismatches, and router/ER endpoint selection
 - Delegating/undelegating Solana accounts to ephemeral rollups
 - High-performance, low-latency transaction flows
 - Crank scheduling (recurring automated transactions)
@@ -25,6 +25,11 @@ Use this Skill when the user asks for:
 **Ephemeral Rollups** enable high-performance, low-latency transactions by temporarily delegating Solana account ownership to an ephemeral rollup. Ideal for gaming, real-time apps, and fast transaction throughput.
 
 **Delegation** transfers account ownership from your program to the delegation program, allowing the ephemeral rollup to process transactions at ~10-50ms latency vs ~400ms on base layer.
+
+**Delegation debugging invariant**: a properly delegated account looks owned by
+the delegation program on base, owned by the original program on the ER endpoint
+returned by router `getDelegationStatus`, and cloned into the ER with
+`delegated=true`.
 
 **MagicIntentBundleBuilder** (SDK 0.11+) is the current way to schedule commit and commit-and-undelegate intents. The free functions `commit_accounts` and `commit_and_undelegate_accounts` are deprecated.
 
@@ -55,8 +60,12 @@ Use this Skill when the user asks for:
    - Use `#[delegate]` and `#[commit]` macros for delegation contexts
 
 2) **Dual Connections**
-   - Base layer connection for initialization and delegation
-   - Ephemeral rollup connection for operations on delegated accounts
+   - Base layer connection for initialization and delegation:
+     `https://rpc.magicblock.app/devnet` or `https://rpc.magicblock.app/mainnet`
+   - Router connection for delegation status:
+     `https://devnet-router.magicblock.app/` or `https://router.magicblock.app/`
+   - Ephemeral rollup connection for operations on delegated accounts:
+     use the `fqdn` returned by router `getDelegationStatus`
 
 3) **Transaction Routing**
    - Delegate transactions → Base Layer
@@ -73,18 +82,28 @@ Use this Skill when the user asks for:
 - Undelegation (ephemeral rollup)
 
 ### 2. Pick the right connection
-- Base layer: `https://api.devnet.solana.com` (or mainnet)
-- Ephemeral rollup: `https://devnet.magicblock.app/`
+- Base layer: `https://rpc.magicblock.app/devnet` or `https://rpc.magicblock.app/mainnet`
+- Router: `https://devnet-router.magicblock.app/` or `https://router.magicblock.app/`
+- Ephemeral rollup: the `fqdn` returned by router `getDelegationStatus` for the account
 
 ### 3. Implement with MagicBlock-specific correctness
 Always be explicit about:
 - Which connection to use for each transaction
-- Delegation status checks before operations
+- Router `getDelegationStatus` checks before operations
 - PDA seeds matching between delegate call and account definition
 - Using `skipPreflight: true` for ER transactions
 - Waiting for state propagation after delegate/undelegate
 
-### 4. Diagnose possible service-side failures
+### 4. Debug live delegation/routing failures
+For `InvalidWritableAccount`, missing private balances, validator mismatch, or
+"account is delegated but ER rejects it" reports:
+- Start from the exact signature or account pubkey.
+- Query router `getDelegationStatus` and use its `fqdn` for ER reads/transactions.
+- Compare base ownership, router status, ER ownership, and recent ER transaction logs.
+- Treat base ownership by the delegation program as expected for a delegated account.
+- See [debugging.md](debugging.md) for the full runbook.
+
+### 5. Diagnose possible service-side failures
 For unexpected RPC, routing, oracle, or transaction errors that could be service-side:
 - Always fetch current data; do not answer from remembered status. Use the direct JSON API `https://status.magicblock.app/api/services` as the source of truth.
 - Select the same network the code uses: JSON keys are `mainnet` and `devnet`.
@@ -97,18 +116,19 @@ For unexpected RPC, routing, oracle, or transaction errors that could be service
 - When reporting findings, include the network, region, endpoint, service status, and relevant date range. Distinguish live status from historical downtime.
 - For direct ER RPC endpoints, optionally correlate with JSON-RPC `getHealth` or `getVersion`, but do not let a single RPC probe replace the status API.
 
-### 5. Add appropriate features
+### 6. Add appropriate features
 - Cranks for recurring automated transactions
 - VRF for verifiable randomness in games/lotteries
 - Private payments API for private transfers and swaps
 
-### 6. Deliverables expectations
+### 7. Deliverables expectations
 When you implement changes, provide:
 - Exact files changed + diffs
 - Commands to install/build/test
 - Risk notes for anything touching delegation/signing/state commits
 
 ## Progressive disclosure (read when needed)
+- Debugging ER/delegation failures: [debugging.md](debugging.md)
 - Core delegation patterns: [delegation.md](delegation.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](magic-actions.md)
 - Topping up a delegated account with lamports: [lamports-topup.md](lamports-topup.md)

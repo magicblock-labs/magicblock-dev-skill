@@ -19,6 +19,7 @@ REPO_URL="https://github.com/magicblock-labs/magicblock-dev-skill"
 
 # File order matches SKILL.md's "Progressive disclosure" section
 REFERENCES=(
+    "debugging.md"
     "delegation.md"
     "magic-actions.md"
     "lamports-topup.md"
@@ -47,7 +48,20 @@ strip_frontmatter() {
 # Extract first H1 heading from a file (after frontmatter)
 extract_title() {
     local file="$1"
-    strip_frontmatter "$file" | grep -m 1 "^# " | sed 's/^# //'
+    awk '
+        BEGIN { in_fm = 0; line_count = 0 }
+        {
+            line_count++
+            if (line_count == 1 && /^---$/) { in_fm = 1; next }
+            if (in_fm && /^---$/) { in_fm = 0; next }
+            if (in_fm) next
+            if (/^# /) {
+                sub(/^# /, "")
+                print
+                exit
+            }
+        }
+    ' "$file"
 }
 
 # Build AGENTS.md - full flattened version
