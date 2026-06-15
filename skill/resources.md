@@ -79,6 +79,26 @@ Prefer the SDK constants over hardcoding these where available:
 `ephemeral_vrf_sdk::consts::VRF_PROGRAM_ID` (and `VRF_PROGRAM_IDENTITY`,
 `DEFAULT_QUEUE`, `DEFAULT_EPHEMERAL_QUEUE`).
 
+## VRF Oracle Queues
+
+The `oracle_queue` is a state account. Like every Solana account it lives on
+Solana, but a delegated queue is directly writable only from inside an
+ephemeral rollup, while a non-delegated queue is directly writable on the base
+layer. Request randomness from the queue that matches where the transaction
+runs. Prefer the `ephemeral_vrf_sdk::consts` constants over hardcoding
+addresses.
+
+| Constant                      | Network              | Queue                              | Address                                        |
+| ----------------------------- | -------------------- | ---------------------------------- | ---------------------------------------------- |
+| `DEFAULT_QUEUE`               | Mainnet / Devnet     | Base-layer queue                   | `Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh` |
+| `DEFAULT_EPHEMERAL_QUEUE`     | Mainnet / Devnet     | Delegated queue (ephemeral rollup) | `5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc` |
+| `DEFAULT_TEST_QUEUE`          | Localnet             | Base-layer queue                   | `GKE6d7iv8kCBrsxr78W3xVdjGLLLJnxsGiuzrsZCGEvb` |
+| `DEFAULT_EPHEMERAL_TEST_QUEUE`| Localnet             | Delegated queue (ephemeral rollup) | `Sc9MJUngNbQXSXGP3F67KvKwVnhaYn6kcioxXNVowYT` |
+
+Mainnet and Devnet share the same default queue addresses — only the cluster
+differs. Localnet uses dedicated test queues that the local validator clones
+from Devnet.
+
 ## Rust Dependencies
 
 ```toml

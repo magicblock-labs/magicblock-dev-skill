@@ -73,16 +73,38 @@ pub struct ConsumeRandomnessCtx<'info> {
 
 ## Oracle Queue Constants
 
-| Constant | Use Case |
-|----------|----------|
-| `DEFAULT_QUEUE` | Non-delegated programs (base layer) |
-| `DEFAULT_EPHEMERAL_QUEUE` | Delegated programs (ephemeral rollup) |
+The `oracle_queue` is a state account. Like every Solana account it lives on
+Solana, but a delegated queue is directly writable only from inside an
+ephemeral rollup, while a non-delegated queue is directly writable on the base
+layer. Request randomness from the queue that matches where the transaction
+runs — the base-layer queue from Solana, or the delegated queue from inside the
+ephemeral rollup. Prefer the `ephemeral_vrf_sdk::consts` constants over
+hardcoding addresses.
+
+| Constant | Queue | Address |
+|----------|-------|---------|
+| `DEFAULT_QUEUE` | Base-layer queue | `Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh` |
+| `DEFAULT_EPHEMERAL_QUEUE` | Delegated queue (ephemeral rollup) | `5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc` |
+| `DEFAULT_TEST_QUEUE` | Base-layer queue, localnet | `GKE6d7iv8kCBrsxr78W3xVdjGLLLJnxsGiuzrsZCGEvb` |
+| `DEFAULT_EPHEMERAL_TEST_QUEUE` | Delegated queue, localnet | `Sc9MJUngNbQXSXGP3F67KvKwVnhaYn6kcioxXNVowYT` |
+
+Queues by network:
+
+| Network  | Base-layer queue    | Delegated queue (ephemeral rollup) |
+| -------- | ------------------- | ---------------------------------- |
+| Mainnet  | `DEFAULT_QUEUE`     | `DEFAULT_EPHEMERAL_QUEUE`           |
+| Devnet   | `DEFAULT_QUEUE`     | `DEFAULT_EPHEMERAL_QUEUE`           |
+| Localnet | `DEFAULT_TEST_QUEUE`| `DEFAULT_EPHEMERAL_TEST_QUEUE`      |
+
+Mainnet and Devnet share the same default queue addresses — only the cluster
+differs. Localnet uses dedicated test queues that the local validator clones
+from Devnet.
 
 ## Key Points
 
 - VRF provides cryptographically verifiable randomness
 - The callback pattern ensures randomness is delivered asynchronously
 - Always validate `vrf_program_identity` signer in the callback to prevent spoofed randomness
-- Use `DEFAULT_EPHEMERAL_QUEUE` for delegated accounts on the ephemeral rollup
-- Use `DEFAULT_QUEUE` for non-delegated accounts on the base layer
+- Use `DEFAULT_EPHEMERAL_QUEUE` when requesting from inside the ephemeral rollup (the queue is delegated to the ER)
+- Use `DEFAULT_QUEUE` when requesting from the base layer (Solana)
 - `caller_seed` can be used to add entropy from the client side
