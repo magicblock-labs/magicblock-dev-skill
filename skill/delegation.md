@@ -4,6 +4,10 @@
 
 ### Dependencies
 
+Known-good active-example snapshot. Before changing a real project, inspect its
+existing manifests and [resources.md](resources.md); do not treat these versions
+as timeless latest recommendations.
+
 ```toml
 # Cargo.toml
 [dependencies]

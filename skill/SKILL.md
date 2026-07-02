@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers debugging live ER/delegation failures, router `getDelegationStatus`, delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, and fast transaction throughput on Solana.
+description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers debugging live ER/delegation failures, router `getDelegationStatus`, delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, Ephemeral SPL Token integration (deposit/transfer/withdraw SPL tokens on the ER), and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, delegated account workflows, and fast transaction throughput on Solana.
 ---
 
 # MagicBlock Ephemeral Rollups Skill
@@ -15,6 +15,7 @@ Use this Skill when the user asks for:
 - VRF (Verifiable Random Function) for provable randomness
 - Magic Actions — base-layer instructions chained to an ER commit
 - Topping up a delegated account's lamports via `lamportsDelegatedTransferIx`
+- Ephemeral SPL Token integration: deposit/transfer/withdraw SPL tokens on the ER via `delegateSpl`/`transferSpl`/`undelegateIx`/`withdrawSpl`, move delegated token accounts from an Anchor program, or CPI into the program via `ephemeral-spl-api`
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with optional bearer-token auth for private reads)
@@ -41,6 +42,8 @@ returned by router `getDelegationStatus`, and cloned into the ER with
 
 **Lamports top-up**: when a delegated account (e.g. a delegated fee payer) needs more lamports on the ER side, use `lamportsDelegatedTransferIx` from the SDK. The transaction is submitted on **base layer** — the Ephemeral SPL Token program creates a single-use lamports PDA, funds it, and delegates it so the ER credits the destination.
 
+**Ephemeral SPL Token**: deposited tokens are locked in a per-mint global vault on base layer while the balance is delegated to the ER, where it appears as a normal SPL token account at the owner's canonical ATA address. Clients drive the lifecycle with the SDK's `delegateSpl`/`transferSpl`/`undelegateIx`/`withdrawSpl` helpers; Anchor programs move the delegated balances with plain SPL Token CPI; contracts needing the raw instruction surface use `ephemeral-spl-api`.
+
 **Architecture**:
 ```
 ┌─────────────────┐     delegate      ┌─────────────────────┐
@@ -54,10 +57,12 @@ returned by router `getDelegationStatus`, and cloned into the ER with
 ## Default stack decisions (opinionated)
 
 1) **Programs: Anchor with ephemeral-rollups-sdk**
-   - Use `ephemeral-rollups-sdk` (0.14.x) with the `anchor` feature for Anchor 1.0.x
-     programs, or the `anchor-compat` feature for legacy Anchor 0.32.1 programs
+   - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
+   - The SDK feature flag selects the Anchor line: `anchor` for Anchor 1.0.x programs, or `anchor-compat` for legacy Anchor 0.32.x programs
    - Apply `#[ephemeral]` macro before `#[program]`
    - Use `#[delegate]` and `#[commit]` macros for delegation contexts
+
+Version-sensitive work: treat versions in this skill as known-good snapshots or compatibility markers, not timeless latest recommendations. Before adding or changing dependencies, inspect the target repo's `Cargo.toml`, `package.json`, `rust-toolchain.toml`, lockfiles, and the relevant upstream manifests/docs. See [resources.md](resources.md) for the current snapshot and source links.
 
 2) **Dual Connections**
    - Base layer connection for initialization and delegation:
@@ -93,6 +98,7 @@ Always be explicit about:
 - PDA seeds matching between delegate call and account definition
 - Using `skipPreflight: true` for ER transactions
 - Waiting for state propagation after delegate/undelegate
+- For Ephemeral SPL Token flows, keeping the `idempotent` mode consistent across delegate/undelegate/withdraw, waiting for undelegation commits before withdrawing, and using `ephemeral-spl-api` exports (not copied bytes or guessed seeds) for direct CPI
 
 ### 4. Debug live delegation/routing failures
 For `InvalidWritableAccount`, missing private balances, validator mismatch, or
@@ -132,8 +138,26 @@ When you implement changes, provide:
 - Core delegation patterns: [delegation.md](delegation.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](magic-actions.md)
 - Topping up a delegated account with lamports: [lamports-topup.md](lamports-topup.md)
+- Ephemeral SPL Token lifecycle (deposit, transfer, app-program CPI, undelegate, withdraw): [ephemeral-spl-token.md](ephemeral-spl-token.md)
 - TypeScript frontend setup: [typescript-setup.md](typescript-setup.md)
 - Cranks (scheduled tasks): [cranks.md](cranks.md)
 - VRF (randomness): [vrf.md](vrf.md)
 - Private Payments API: [private-payments.md](private-payments.md)
 - Reference links & versions: [resources.md](resources.md)
+
+## Terminal Self-Heal Proposal
+
+Before the final response, review the entire run against this skill's intended workflow.
+
+Check:
+- expected vs actual user-visible outputs
+- command, script, validation, and artifact results
+- missed coverage or skipped workflow steps
+- stale instructions or brittle wording
+- unexpected script/output mismatches
+- verification gaps
+- fallback or impromptu behavior
+
+If improvements are needed, propose concrete skill edits with file paths, rationale, and evidence.
+
+Stop after the proposal. Do not edit this skill, run mutation commands, or apply fixes unless the user explicitly approves in a later instruction.

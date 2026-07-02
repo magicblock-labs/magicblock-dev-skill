@@ -23,6 +23,7 @@ REFERENCES=(
     "delegation.md"
     "magic-actions.md"
     "lamports-topup.md"
+    "ephemeral-spl-token.md"
     "typescript-setup.md"
     "cranks.md"
     "vrf.md"
@@ -75,8 +76,8 @@ build_agents_md() {
         for ref in "${REFERENCES[@]}"; do
             local ref_path="$SKILL_DIR/$ref"
             if [ ! -f "$ref_path" ]; then
-                echo "Warning: missing reference file: $ref" >&2
-                continue
+                echo "Error: missing reference file: $ref" >&2
+                exit 1
             fi
             echo ""
             echo "---"
@@ -106,7 +107,10 @@ build_system_prompt() {
         echo ""
         for ref in "${REFERENCES[@]}"; do
             local ref_path="$SKILL_DIR/$ref"
-            if [ ! -f "$ref_path" ]; then continue; fi
+            if [ ! -f "$ref_path" ]; then
+                echo "Error: missing reference file: $ref" >&2
+                exit 1
+            fi
             local title
             title=$(extract_title "$ref_path")
             if [ -z "$title" ]; then title="$ref"; fi
@@ -123,7 +127,7 @@ build_cursor_mdc() {
     {
         cat <<'EOF'
 ---
-description: MagicBlock Ephemeral Rollups development patterns for Solana — delegation flows, Magic Actions, dual-connection architecture, cranks, VRF, lamports top-up, commit sponsorship, and private payments with swaps. Use when working on MagicBlock or Ephemeral Rollups.
+description: MagicBlock Ephemeral Rollups development patterns for Solana — delegation flows, Magic Actions, dual-connection architecture, cranks, VRF, lamports top-up, Ephemeral SPL Token smart-contract integration, commit sponsorship, and private payments with swaps. Use when working on MagicBlock or Ephemeral Rollups.
 globs:
 alwaysApply: false
 ---
@@ -132,7 +136,10 @@ EOF
         strip_frontmatter "$SKILL_DIR/SKILL.md"
         for ref in "${REFERENCES[@]}"; do
             local ref_path="$SKILL_DIR/$ref"
-            if [ ! -f "$ref_path" ]; then continue; fi
+            if [ ! -f "$ref_path" ]; then
+                echo "Error: missing reference file: $ref" >&2
+                exit 1
+            fi
             echo ""
             echo "---"
             echo ""
