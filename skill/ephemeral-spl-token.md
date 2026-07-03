@@ -13,7 +13,7 @@ Sources of truth:
 2. **TypeScript SDK**: `@magicblock-labs/ephemeral-rollups-sdk` — high-level
    `delegateSpl` / `transferSpl` / `undelegateIx` / `withdrawSpl` helpers plus
    per-instruction builders and PDA derivations.
-3. **Working example**: `magicblock-engine-examples/spl-tokens` — end-to-end
+3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` — end-to-end
    Anchor program + tests exercising the full lifecycle.
 
 Version snapshot (known-good from the active example): TS + Rust
