@@ -75,7 +75,7 @@ async function topUpDelegatedAccount(
 
 ## Working reference
 
-A full working integration is in `magicblock-engine-examples/spl-tokens/app/app/src/App.tsx` — search for `handleLamportsTransfer`. It demonstrates:
+A full working integration is in `magicblock-engine-examples/spl-tokens/anchor/app/src/App.tsx` — search for `handleLamportsTransfer`. It demonstrates:
 
 - Generating the salt with `crypto.getRandomValues(new Uint8Array(32))`
 - Deriving the lamports PDA with `deriveLamportsPda` for logging/debugging
