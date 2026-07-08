@@ -2,6 +2,9 @@
 
 ## Dependencies
 
+Known-good active-example snapshot. Keep the target repo's existing package
+line unless the task is an explicit migration; see [resources.md](resources.md).
+
 ```json
 {
   "dependencies": {

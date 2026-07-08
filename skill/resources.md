@@ -47,7 +47,19 @@ curl -sS https://status.magicblock.app/api/services \
   | jq '.environments.mainnet.regions.asia.servers["as.magicblock.app"].live_status'
 ```
 
-## Version Requirements
+## Version Policy
+
+Keep exact versions only as known-good snapshots, compatibility tables, or
+migration examples. Do not treat
+versions in this skill as the latest recommendation. Before adding or changing
+dependencies, inspect the target repo's `Cargo.toml`, `package.json`,
+`rust-toolchain.toml`, lockfiles, and the relevant upstream manifests/docs.
+
+Existing project manifests override this reference. Only change versions when
+the user asked for an upgrade/migration or the current repo already establishes
+that version line.
+
+## Known-Good Example Snapshot
 
 | Software | Version |
 | -------- | ------- |
@@ -56,7 +68,8 @@ curl -sS https://status.magicblock.app/api/services \
 | Anchor   | 1.0.2   |
 | Node     | 24.10.0 |
 
-> Active examples target **Anchor 1.0.2**. Anchor 0.32.1 programs are kept
+> Snapshot from the active MagicBlock engine examples. Active examples target
+> **Anchor 1.0.2**. Anchor 0.32.1 programs are kept
 > under `00-LEGACY_EXAMPLES/` in the engine examples repo for projects still
 > on the old line — see the feature-flag note below.
 
@@ -99,7 +112,7 @@ Mainnet and Devnet share the same default queue addresses — only the cluster
 differs. Localnet uses dedicated test queues that the local validator clones
 from Devnet.
 
-## Rust Dependencies
+## Rust Dependencies Snapshot
 
 ```toml
 [dependencies]
@@ -123,7 +136,10 @@ sha2 = "0.10"
 ephemeral-vrf-sdk = { version = "0.3.0", features = ["anchor"] }
 ```
 
-## NPM Dependencies
+Use this block as a known-good example for the active examples. For a real repo,
+copy its existing version line unless doing an explicit migration.
+
+## NPM Dependencies Snapshot
 
 ```json
 {

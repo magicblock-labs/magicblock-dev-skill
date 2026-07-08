@@ -75,6 +75,7 @@ Produces:
 - VRF (Verifiable Random Function) for provable randomness
 - Magic Actions — base-layer instructions chained to an ER commit
 - Topping up delegated accounts with lamports via `lamportsDelegatedTransferIx`
+- Ephemeral SPL Token lifecycle: deposit, transfer, app-program CPI, undelegate, withdraw
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with optional bearer-token auth for private reads)
@@ -98,6 +99,7 @@ Change my roll_dice function to use VRF
 Set up a crank that updates game state every 100ms
 Add a Magic Action that updates my onchain leaderboard after every commit
 Top up my delegated fee payer with lamports
+Deposit SPL tokens into the ER, transfer them, and withdraw back to base layer
 Build a private USDC transfer flow using the Payments API
 Help me integrate MagicBlock into my Anchor program
 ```
