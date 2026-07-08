@@ -65,6 +65,16 @@ Produces:
 - `dist/magicblock.cursor.mdc` — Cursor-formatted rule with `.mdc` frontmatter
 - `dist/magicblock.zip` — zipped `skill/` folder for Claude.ai upload
 
+## Recommended companion skill: `solana-dev`
+
+This skill layers **Ephemeral Rollups-specific** patterns (delegation, dual connections, cranks, VRF, Magic Actions, private payments) on top of ordinary Solana development — it assumes base-layer Solana and Anchor fluency rather than teaching it. For the general Solana layer (program scaffolding, PDAs, SPL tokens, client generation, wallet wiring, LiteSVM/Mollusk testing), install the Solana Foundation's [`solana-dev`](https://github.com/solana-foundation/solana-dev-skill) skill alongside this one and let each handle its layer:
+
+```bash
+npx skills add https://github.com/solana-foundation/solana-dev-skill --skill solana-dev
+```
+
+Skills don't declare dependencies on each other, so this isn't installed automatically — install it yourself (see the [solana-dev-skill repo](https://github.com/solana-foundation/solana-dev-skill) for other install options). Once both are present, agents use `solana-dev` for base-layer Solana work and this skill for the ER-specific pieces.
+
 ## What This Skill Covers
 
 - MagicBlock Ephemeral Rollups integration

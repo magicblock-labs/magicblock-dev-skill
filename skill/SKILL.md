@@ -21,6 +21,14 @@ Use this Skill when the user asks for:
 - Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with optional bearer-token auth for private reads)
 - Lifting the default 10-commit sponsorship cap with `magic_fee_vault`
 
+## Pair with the `solana-dev` skill
+
+This Skill layers **Ephemeral Rollups-specific** concerns (delegation, dual connections, cranks, VRF,
+magic actions, private payments) on top of ordinary Solana development — it assumes base-layer Solana
+and Anchor fluency rather than teaching it. When a task also needs general Solana/Anchor work — program
+scaffolding, PDAs, account layouts, SPL tokens, wallet/client wiring, or testing (LiteSVM/Mollusk/etc.) —
+also load the **`solana-dev`** skill for that layer and keep this Skill for the ER-specific pieces.
+
 ## Key Concepts
 
 **Ephemeral Rollups** enable high-performance, low-latency transactions by temporarily delegating Solana account ownership to an ephemeral rollup. Ideal for gaming, real-time apps, and fast transaction throughput.
@@ -56,11 +64,21 @@ returned by router `getDelegationStatus`, and cloned into the ER with
 
 ## Default stack decisions (opinionated)
 
-1) **Programs: Anchor with ephemeral-rollups-sdk**
+1) **Programs: Anchor with ephemeral-rollups-sdk** (native/Pinocchio also supported — see below)
    - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
    - The SDK feature flag selects the Anchor line: `anchor` for Anchor 1.0.x programs, or `anchor-compat` for legacy Anchor 0.32.x programs
-   - Apply `#[ephemeral]` macro before `#[program]`
-   - Use `#[delegate]` and `#[commit]` macros for delegation contexts
+
+   **Commonly-missed macros:**
+   - `#[ephemeral]` on the program module, **before** `#[program]` — injects the `process_undelegation` callback (the delegation program CPIs into it to return the account) and the commit/undelegate intent builders. It's what **commit and undelegation** need, not the `delegate` instruction itself — but include it on any program that delegates, since without the callback the account can't be undelegated.
+   - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
+   - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
+     callback macro is the one most often forgotten. Enable the `vrf` feature on `ephemeral-rollups-sdk`
+     (VRF is no longer a separate `ephemeral-vrf-sdk` crate for new code). See [vrf.md](vrf.md).
+
+   **Non-Anchor programs:** native Rust / Pinocchio is a first-class supported path via the
+   `ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
+   engine examples repo ships Anchor **and** Pinocchio variants of `roll-dice`; reach for Pinocchio when
+   the target program is native rather than Anchor.
 
 Version-sensitive work: treat versions in this skill as known-good snapshots or compatibility markers, not timeless latest recommendations. Before adding or changing dependencies, inspect the target repo's `Cargo.toml`, `package.json`, `rust-toolchain.toml`, lockfiles, and the relevant upstream manifests/docs. See [resources.md](resources.md) for the current snapshot and source links.
 
