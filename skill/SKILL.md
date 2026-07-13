@@ -40,9 +40,11 @@ the delegation program on base, owned by the original program on the ER endpoint
 returned by router `getDelegationStatus`, and cloned into the ER with
 `delegated=true`.
 
-**MagicIntentBundleBuilder** (SDK 0.11+) is the current way to schedule commit and commit-and-undelegate intents. The free functions `commit_accounts` and `commit_and_undelegate_accounts` are deprecated.
+For the verified SDK v0.15.5 snapshot, use **MagicIntentBundleBuilder** to
+schedule commit and commit-and-undelegate intents. Do not use the deprecated
+free functions `commit_accounts` and `commit_and_undelegate_accounts`.
 
-**Private Ephemeral Rollups (PER)** add a permission account that gates who can interact with a delegated account inside a TEE-backed validator. The recommended pattern is to delegate the permission account itself alongside the permissioned account, so member updates execute on the ER in milliseconds instead of base-layer round-trips.
+**Private Ephemeral Rollups (PER)** gate a delegated account inside a TEE-backed validator with an ER-local `EphemeralPermission`. Delegate only the data account on the base layer, then create, update, and close its permission on the ER with `CreateEphemeralPermissionCpi`, `UpdateEphemeralPermissionCpi`, and `CloseEphemeralPermissionCpi`. Do not create or delegate a separate base-layer permission account.
 
 **Magic Actions** are base-layer instructions scheduled inside an ER transaction via `MagicIntentBundleBuilder.add_post_commit_actions(...)`. They execute atomically once the commit is sealed back to base layer — useful for leaderboard updates, reward distribution, and any side-effect that must run as part of the commit.
 
@@ -66,21 +68,22 @@ returned by router `getDelegationStatus`, and cloned into the ER with
 
 1) **Programs: Anchor with ephemeral-rollups-sdk** (native/Pinocchio also supported — see below)
    - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
-   - The SDK feature flag selects the Anchor line: `anchor` for Anchor 1.0.x programs, or `anchor-compat` for legacy Anchor 0.32.x programs
+   - The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs
 
    **Commonly-missed macros:**
    - `#[ephemeral]` on the program module, **before** `#[program]` — injects the `process_undelegation` callback (the delegation program CPIs into it to return the account) and the commit/undelegate intent builders. It's what **commit and undelegation** need, not the `delegate` instruction itself — but include it on any program that delegates, since without the callback the account can't be undelegated.
    - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
    - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
      callback macro is the one most often forgotten. Enable the `vrf` feature on `ephemeral-rollups-sdk`
-     (VRF is no longer a separate `ephemeral-vrf-sdk` crate for new code). See [vrf.md](vrf.md).
+     — SDK v0.15.5 re-exports VRF, so new Anchor code does not need a direct
+     `ephemeral-vrf-sdk` dependency. See [vrf.md](vrf.md).
 
    **Non-Anchor programs:** native Rust / Pinocchio is a first-class supported path via the
    `ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
    engine examples repo ships Anchor **and** Pinocchio variants of `roll-dice`; reach for Pinocchio when
    the target program is native rather than Anchor.
 
-Version-sensitive work: treat versions in this skill as known-good snapshots or compatibility markers, not timeless latest recommendations. Before adding or changing dependencies, inspect the target repo's `Cargo.toml`, `package.json`, `rust-toolchain.toml`, lockfiles, and the relevant upstream manifests/docs. See [resources.md](resources.md) for the current snapshot and source links.
+Version-sensitive work: treat versions in this skill as known-good snapshots or compatibility markers, not timeless latest recommendations. Before adding or changing dependencies, inspect the target repo's `Cargo.toml`, `package.json`, `rust-toolchain.toml`, lockfiles, and the relevant upstream manifests/docs. See [resources.md](resources.md) for the dated verified snapshot and source links.
 
 2) **Dual Connections**
    - Base layer connection for initialization and delegation:

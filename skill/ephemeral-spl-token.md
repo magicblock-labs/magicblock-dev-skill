@@ -16,9 +16,10 @@ Sources of truth:
 3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` — end-to-end
    Anchor program + tests exercising the full lifecycle.
 
-Version snapshot (known-good from the active example): TS + Rust
-`ephemeral-rollups-sdk` **0.14.3**, Anchor **1.0.2**. Treat as compatibility
-markers, not latest recommendations — see [resources.md](resources.md).
+SDK version example, verified 2026-07-13: TS + Rust
+`ephemeral-rollups-sdk` **0.15.5**, with Anchor **1.0.2** for modern Anchor
+programs. Preserve an existing target repo's compatible versions unless the
+task explicitly requests an upgrade; see [resources.md](resources.md).
 
 Program ID (all clusters): `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`
 
@@ -72,7 +73,7 @@ difference is purely which surface you touch: canonical ATAs + SDK helpers
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.14.3",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5",
     "@solana/spl-token": "^0.4.14"
   }
 }
@@ -293,7 +294,7 @@ Cargo dependencies (snapshot):
 ```toml
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
 anchor-spl = { version = "1.0.2" }
-ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
 ```
 
 Calling it from the client — the transaction targets the **ER endpoint**, so
