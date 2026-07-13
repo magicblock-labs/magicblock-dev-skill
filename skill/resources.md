@@ -166,7 +166,7 @@ explicit migration.
 - [Router getDelegationStatus](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/api-reference/er/getDelegationStatus)
 - [MagicBlock Status API](https://status.magicblock.app/api/services)
 - [MagicBlock Engine Examples](https://github.com/magicblock-labs/magicblock-engine-examples)
-- [PER access-control guide](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control)
+- [PER access-control guide — Ephemeral Permission lifecycle](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control#ephemeral-permission)
 - [Anchor private-counter example](https://github.com/magicblock-labs/magicblock-engine-examples/tree/main/private-counter/anchor)
 - [Ephemeral SPL Token](https://github.com/magicblock-labs/ephemeral-spl-token)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)

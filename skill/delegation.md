@@ -221,7 +221,8 @@ pub struct MyAccount {
 
 Derive `permission` from `[PERMISSION_SEED, my_account.key()]` under
 `PERMISSION_PROGRAM_ID`. Make creation idempotent because clients may retry ER
-transactions.
+transactions. Skip creation only when that PDA is already an initialized
+permission-program account.
 
 ```rust
 pub fn init_permission(
@@ -236,7 +237,9 @@ pub fn init_permission(
         members.len() <= MAX_PERMISSION_MEMBERS,
         PermissionError::TooManyMembers
     );
-    if ctx.accounts.permission.lamports() > 0 {
+    if ctx.accounts.permission.owner == &PERMISSION_PROGRAM_ID
+        && !ctx.accounts.permission.data_is_empty()
+    {
         return Ok(());
     }
     let signer_seeds: &[&[u8]] = &[
