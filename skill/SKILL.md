@@ -1,12 +1,13 @@
 ---
 name: magicblock
-description: MagicBlock Ephemeral Rollups development patterns for Solana. Covers debugging live ER/delegation failures, router `getDelegationStatus`, delegation/undelegation flows, dual-connection architecture (base layer + ER), cranks for scheduled tasks, VRF for verifiable randomness, magic actions for atomic ER-commit + base-layer follow-ups, private payments API (deposits, transfers, withdrawals, swaps, and challenge/login auth flow), commit sponsorship and fee vault wiring, lamports top-up for delegated accounts, Ephemeral SPL Token integration (deposit/transfer/withdraw SPL tokens on the ER), and TypeScript/Anchor integration. Use for high-performance gaming, real-time apps, private transfers and swaps, delegated account workflows, and fast transaction throughput on Solana.
+description: Design, implement, and debug MagicBlock Ephemeral Rollups applications on Solana. Covers MagicBlock architecture planning, account placement, delegation and settlement design, validation-environment selection, live ER/delegation debugging, router `getDelegationStatus`, dual-connection routing, cranks, VRF, magic actions, private payments, commit sponsorship, lamports top-up, Ephemeral SPL Token integration, and TypeScript/Anchor integration. Use when planning or building high-performance gaming, trading, payments, real-time apps, private transfers and swaps, delegated account workflows, or fast transaction throughput on Solana.
 ---
 
 # MagicBlock Ephemeral Rollups Skill
 
 ## What this Skill is for
 Use this Skill when the user asks for:
+- MagicBlock architecture planning, product selection, account placement, delegation boundaries, or settlement design
 - MagicBlock Ephemeral Rollups integration
 - Debugging live ER transaction failures, delegation-state mismatches, and router/ER endpoint selection
 - Delegating/undelegating Solana accounts to ephemeral rollups
@@ -100,6 +101,13 @@ Version-sensitive work: treat versions in this skill as known-good snapshots or 
 
 ## Operating procedure (how to execute tasks)
 
+### 0. Plan architecture when the design is not fixed
+For a new application, integration design, migration, or implementation plan, read
+[architecture-planning.md](architecture-planning.md) before writing code. Decide whether MagicBlock
+is needed, select the smallest product set, map accounts and transaction routing, define settlement
+and recovery, and choose validation environments. Ask at most three material questions per round;
+otherwise proceed with explicit assumptions.
+
 ### 1. Classify the operation type
 - Account initialization (base layer)
 - Delegation (base layer)
@@ -155,6 +163,7 @@ When you implement changes, provide:
 - Risk notes for anything touching delegation/signing/state commits
 
 ## Progressive disclosure (read when needed)
+- Architecture planning, output templates, and validation-environment selection: [architecture-planning.md](architecture-planning.md)
 - Debugging ER/delegation failures: [debugging.md](debugging.md)
 - Core delegation patterns: [delegation.md](delegation.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](magic-actions.md)
