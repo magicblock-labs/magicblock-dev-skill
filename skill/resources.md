@@ -65,13 +65,13 @@ that version line.
 | -------- | ------- |
 | Solana   | 3.1.9   |
 | Rust     | 1.89.0  |
-| Anchor   | 1.0.2   |
+| Anchor   | 1.0.2 / 0.32.1 (example-dependent) |
 | Node     | 24.10.0 |
 
-> Snapshot from the active MagicBlock engine examples. Active examples target
-> **Anchor 1.0.2**. Anchor 0.32.1 programs are kept
-> under `00-LEGACY_EXAMPLES/` in the engine examples repo for projects still
-> on the old line — see the feature-flag note below.
+> Active MagicBlock engine examples use mixed Anchor versions: examples such as
+> root `counter/anchor` and `private-counter/anchor` use 1.0.2, while root
+> `gachapon-example` uses 0.32.1. Inspect the target example's `Cargo.toml` and
+> preserve its version line unless the task explicitly requests a migration.
 
 ## Key Program IDs
 
@@ -89,8 +89,8 @@ that version line.
 Prefer the SDK constants over hardcoding these where available:
 `ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID`,
 `ephemeral_rollups_sdk::consts::ESPL_TOKEN_PROGRAM_ID`,
-`ephemeral_vrf_sdk::consts::VRF_PROGRAM_ID` (and `VRF_PROGRAM_IDENTITY`,
-`DEFAULT_QUEUE`, `DEFAULT_EPHEMERAL_QUEUE`).
+`ephemeral_rollups_sdk::vrf::consts::VRF_PROGRAM_ID` (and `DEFAULT_QUEUE`,
+`DEFAULT_EPHEMERAL_QUEUE`).
 
 ## VRF Oracle Queues
 
@@ -98,7 +98,7 @@ The `oracle_queue` is a state account. Like every Solana account it lives on
 Solana, but a delegated queue is directly writable only from inside an
 ephemeral rollup, while a non-delegated queue is directly writable on the base
 layer. Request randomness from the queue that matches where the transaction
-runs. Prefer the `ephemeral_vrf_sdk::consts` constants over hardcoding
+runs. Prefer the `ephemeral_rollups_sdk::vrf::consts` constants over hardcoding
 addresses.
 
 | Constant                      | Network              | Queue                              | Address                                        |
@@ -114,30 +114,36 @@ from Devnet.
 
 ## Rust Dependencies Snapshot
 
+Snapshot verified **2026-07-13** against both package registries and the
+`v0.15.5` SDK tag. Re-check before calling it latest:
+
+```bash
+cargo search ephemeral-rollups-sdk --limit 1
+npm view @magicblock-labs/ephemeral-rollups-sdk version
+```
+
 ```toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
 
 # Feature flag picks the Anchor line:
-#   "anchor"        → Anchor 1.0.x (current default)
-#   "anchor-compat" → Anchor 0.32.1 (legacy)
-# The "disable-realloc" feature no longer exists — drop it if migrating from <0.14.
-
+#   "anchor"        → Anchor 1.x
+#   "anchor-compat" → Anchor >=0.28,<1.0
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "access-control"] }
 
 # For cranks
 magicblock-magic-program-api = { version = "0.10.1", default-features = false }
 bincode = "^1.3"
 sha2 = "0.10"
 
-# For VRF
-ephemeral-vrf-sdk = { version = "0.3.0", features = ["anchor"] }
+# For VRF, enable the SDK's scoped VRF API
+# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "vrf"] }
 ```
 
-Use this block as a known-good example for the active examples. For a real repo,
-copy its existing version line unless doing an explicit migration.
+For a real repo, keep its existing compatible version line unless doing an
+explicit migration.
 
 ## NPM Dependencies Snapshot
 
@@ -145,7 +151,7 @@ copy its existing version line unless doing an explicit migration.
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.14.3"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5"
   }
 }
 ```
@@ -160,9 +166,11 @@ copy its existing version line unless doing an explicit migration.
 - [Router getDelegationStatus](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/api-reference/er/getDelegationStatus)
 - [MagicBlock Status API](https://status.magicblock.app/api/services)
 - [MagicBlock Engine Examples](https://github.com/magicblock-labs/magicblock-engine-examples)
+- [PER access-control guide — Ephemeral Permission lifecycle](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control#ephemeral-permission)
+- [Anchor private-counter example](https://github.com/magicblock-labs/magicblock-engine-examples/tree/main/private-counter/anchor)
 - [Ephemeral SPL Token](https://github.com/magicblock-labs/ephemeral-spl-token)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
-- [Ephemeral VRF SDK (Rust)](https://crates.io/crates/ephemeral-vrf-sdk)
+- [Ephemeral Rollups SDK v0.15.5 source](https://github.com/magicblock-labs/ephemeral-rollups-sdk/tree/v0.15.5)
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)
 - [Private Payments API Reference](https://payments.magicblock.app/reference)

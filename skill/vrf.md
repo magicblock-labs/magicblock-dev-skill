@@ -4,18 +4,17 @@ VRF provides provably fair randomness for games, lotteries, and any application 
 
 ## Dependencies
 
-VRF now ships as a **feature of the main SDK** — enable the `vrf` feature on
-`ephemeral-rollups-sdk`. There is no separate `ephemeral-vrf-sdk` crate to add for new Anchor code.
+In the SDK v0.15.5 snapshot verified 2026-07-13, VRF is exposed through the
+main SDK. Enable its `vrf` feature; Anchor programs using this snapshot do not
+need a direct `ephemeral-vrf-sdk` dependency.
 
 ```toml
 [dependencies]
-ephemeral-rollups-sdk = { version = "0.15.4", features = ["anchor", "vrf"] }
+ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "vrf"] }
 ```
 
-> Older examples import a standalone `ephemeral-vrf-sdk` crate and call the non-scoped
-> `create_request_randomness_ix` with a manual `vrf_program_identity` signer account. That path still
-> works, but new code should use the scoped API below (`ephemeral_rollups_sdk::vrf` +
-> `create_request_scoped_randomness_ix` + `#[vrf]` / `#[vrf_callback]`).
+Use the scoped API below: `ephemeral_rollups_sdk::vrf`,
+`create_request_scoped_randomness_ix`, `#[vrf]`, and `#[vrf_callback]`.
 
 ## Imports
 
@@ -141,7 +140,7 @@ from Devnet.
 
 VRF is also supported outside Anchor via the `ephemeral-rollups-pinocchio` crate
 (`ephemeral_rollups_pinocchio::vrf` — `RequestRandomness` / `RequestRandomnessCpi`,
-`scoped_vrf_identity`, `random_u8_with_range`, `VRF_PROGRAM_IDENTITY`). The flow is the same
+`scoped_vrf_identity`, `random_u8_with_range`). The flow is the same
 (request → oracle callback), but you validate the program identity manually against
 `scoped_vrf_identity(program_id)` instead of relying on the `#[vrf_callback]` macro. See the
 Pinocchio `roll-dice` example in the engine examples repo.

@@ -2,14 +2,15 @@
 
 ## Dependencies
 
-Known-good active-example snapshot. Keep the target repo's existing package
-line unless the task is an explicit migration; see [resources.md](resources.md).
+SDK version example, verified 2026-07-13. Keep the target repo's existing
+compatible package line unless the task is an explicit migration; see
+[resources.md](resources.md).
 
 ```json
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.14.3"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5"
   }
 }
 ```

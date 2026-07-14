@@ -4,23 +4,21 @@
 
 ### Dependencies
 
-Known-good active-example snapshot. Before changing a real project, inspect its
-existing manifests and [resources.md](resources.md); do not treat these versions
-as timeless latest recommendations.
+SDK version example, verified 2026-07-13. Before changing a real project,
+inspect its existing manifests and [resources.md](resources.md); keep the
+project's versions unless the task explicitly requests an upgrade.
 
 ```toml
 # Cargo.toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
 
 # Anchor line is selected by the SDK feature flag:
-#   "anchor"        → Anchor 1.0.x (current)
-#   "anchor-compat" → Anchor 0.32.1 (legacy programs)
-# Note: "disable-realloc" was removed in SDK 0.14 — remove it when upgrading.
-
+#   "anchor"        → Anchor 1.x
+#   "anchor-compat" → Anchor >=0.28,<1.0
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.14.3", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "access-control"] }
 ```
 
 ### Imports
@@ -32,9 +30,9 @@ use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 ```
 
-> **SDK 0.11+ note:** the free functions `commit_accounts` and
-> `commit_and_undelegate_accounts` are deprecated. All commit / undelegate
-> intents are now scheduled through `MagicIntentBundleBuilder`. The builder
+> The free functions `commit_accounts` and `commit_and_undelegate_accounts`
+> are deprecated. Schedule commit / undelegate intents through
+> `MagicIntentBundleBuilder`. The builder
 > exposes inherent `build`, `build_and_invoke`, and `build_and_invoke_signed`
 > methods for Anchor; native Rust call sites must additionally
 > `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;`.
@@ -113,77 +111,66 @@ pub struct Undelegate<'info> {
 }
 ```
 
-## Private Ephemeral Rollups (PER): Delegating with Permissions
+## Private Ephemeral Rollups (PER): ER-local permissions
 
-For Private Ephemeral Rollups, accounts are delegated alongside a **permission account**
-that gates who can interact with the account inside the TEE-backed validator.
-The recommended pattern is to **create, delegate, and manage permissions in a single
-atomic instruction** that combines the permission lifecycle with the account delegation.
+For Private Ephemeral Rollups, delegate only the data PDA to the TEE validator on
+the base layer. After delegation, create its `EphemeralPermission` directly on
+the ER, then update or close it there as needed. There is no separate base-layer
+permission account to create, delegate, commit, or undelegate.
 
-**Why delegate the permission account itself?**
-Once the permission account is delegated to the ER, member updates execute on the ER
-in milliseconds instead of going through a base-layer transaction. This makes
-permission changes — adding/removing members, rotating authorities, granting
-read access — fast enough for interactive UX. The permission account behaves
-like any other delegated account: low-latency writes on the ER, periodic
-commits back to the base layer.
+The delegated data PDA signs each permission CPI with its program seeds. It also
+pays the ephemeral permission rent, so pre-fund the data PDA during base-layer
+initialization with enough lamports for `EphemeralPermission::size_of(member_count)`.
+Choose a maximum member count up front and enforce that cap in every create and
+update instruction so permission growth cannot exceed the funded capacity.
 
 ### Imports
 
 ```rust
+use anchor_lang::system_program::{transfer, Transfer};
 use ephemeral_rollups_sdk::access_control::instructions::{
-    CommitAndUndelegatePermissionCpiBuilder, CreatePermissionCpiBuilder,
-    DelegatePermissionCpiBuilder, UpdatePermissionCpiBuilder,
+    CloseEphemeralPermissionCpi, CreateEphemeralPermissionCpi,
+    UpdateEphemeralPermissionCpi,
 };
-use ephemeral_rollups_sdk::access_control::structs::{Member, MembersArgs, PERMISSION_SEED};
-use ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID;
-use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
+use ephemeral_rollups_sdk::access_control::structs::{
+    EphemeralMembersArgs, EphemeralPermission, Member, PERMISSION_SEED,
+};
+use ephemeral_rollups_sdk::consts::{
+    EPHEMERAL_VAULT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID,
+};
 ```
 
-### Atomic Delegate (create permission + delegate permission + delegate account)
+### 1. Pre-fund and delegate only the data PDA on base
 
 ```rust
-pub fn delegate(
-    ctx: Context<DelegatePrivately>,
-    members: Option<Vec<Member>>,
-) -> Result<()> {
+// During base-layer initialization, fund the data PDA for the largest member
+// list the permission will need on the ER.
+const ACCOUNT_SEED: &[u8] = b"my-account";
+const MAX_PERMISSION_MEMBERS: usize = 8;
+
+pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.key(),
+            Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to: ctx.accounts.my_account.to_account_info(),
+            },
+        ),
+        ephemeral_rollups_sdk::ephemeral_accounts::rent(
+            EphemeralPermission::size_of(MAX_PERMISSION_MEMBERS) as u32,
+        ),
+    )?;
+    ctx.accounts.my_account.authority = ctx.accounts.authority.key();
+    Ok(())
+}
+
+pub fn delegate(ctx: Context<DelegatePrivately>) -> Result<()> {
     let validator = ctx.accounts.validator.as_ref();
-
-    // 1. Create the permission account (skip if it already exists).
-    if ctx.accounts.permission.data_is_empty() {
-        CreatePermissionCpiBuilder::new(&ctx.accounts.permission_program)
-            .permissioned_account(&ctx.accounts.my_account.to_account_info())
-            .permission(&ctx.accounts.permission.to_account_info())
-            .payer(&ctx.accounts.payer.to_account_info())
-            .system_program(&ctx.accounts.system_program.to_account_info())
-            .args(MembersArgs { members })
-            .invoke_signed(&[&[ACCOUNT_SEED, &[ctx.bumps.my_account]]])?;
-    }
-
-    // 2. Delegate the permission account itself (skip if already delegated).
-    //    This is what makes permission updates fast: once delegated, member
-    //    changes run on the ER instead of base layer.
-    if ctx.accounts.permission.owner != &ephemeral_rollups_sdk::id() {
-        DelegatePermissionCpiBuilder::new(&ctx.accounts.permission_program.to_account_info())
-            .permissioned_account(&ctx.accounts.my_account.to_account_info(), true)
-            .permission(&ctx.accounts.permission.to_account_info())
-            .payer(&ctx.accounts.payer.to_account_info())
-            .authority(&ctx.accounts.my_account.to_account_info(), false)
-            .system_program(&ctx.accounts.system_program.to_account_info())
-            .owner_program(&ctx.accounts.permission_program.to_account_info())
-            .delegation_buffer(&ctx.accounts.buffer_permission.to_account_info())
-            .delegation_metadata(&ctx.accounts.delegation_metadata_permission.to_account_info())
-            .delegation_record(&ctx.accounts.delegation_record_permission.to_account_info())
-            .delegation_program(&ctx.accounts.delegation_program.to_account_info())
-            .validator(validator)
-            .invoke_signed(&[&[ACCOUNT_SEED, &[ctx.bumps.my_account]]])?;
-    }
-
-    // 3. Delegate the permissioned account (skip if already delegated).
     if ctx.accounts.my_account.owner != &ephemeral_rollups_sdk::id() {
         ctx.accounts.delegate_my_account(
-            &ctx.accounts.payer,
-            &[ACCOUNT_SEED],
+            &ctx.accounts.authority,
+            &[ACCOUNT_SEED, ctx.accounts.authority.key().as_ref()],
             DelegateConfig {
                 validator: validator.map(|v| v.key()),
                 ..Default::default()
@@ -192,72 +179,193 @@ pub fn delegate(
     }
     Ok(())
 }
-```
 
-### Updating Permissions on the ER
-
-Because the permission account is delegated, member updates run inside the
-ER and confirm in milliseconds. Use `UpdatePermissionCpiBuilder` from any
-ER-side instruction:
-
-```rust
-UpdatePermissionCpiBuilder::new(&ctx.accounts.permission_program.to_account_info())
-    .authority(&ctx.accounts.payer.to_account_info(), true)
-    .permissioned_account(&ctx.accounts.my_account.to_account_info(), true)
-    .permission(&ctx.accounts.permission.to_account_info())
-    .args(MembersArgs { members: Some(new_members) })
-    .invoke_signed(&[&[ACCOUNT_SEED, &[ctx.bumps.my_account]]])?;
-```
-
-### Atomic Undelegate (release permission + commit/undelegate account)
-
-`undelegate` mirrors `delegate`: both the permission account and the
-permissioned account are released in a single ER transaction.
-
-```rust
-pub fn undelegate(ctx: Context<UndelegatePrivately>) -> Result<()> {
-    // 1. Commit and undelegate the permission account.
-    CommitAndUndelegatePermissionCpiBuilder::new(
-        &ctx.accounts.permission_program.to_account_info(),
-    )
-    .authority(&ctx.accounts.payer.to_account_info(), true)
-    .permissioned_account(&ctx.accounts.my_account.to_account_info(), true)
-    .permission(&ctx.accounts.permission.to_account_info())
-    .magic_context(&ctx.accounts.magic_context.to_account_info())
-    .magic_program(&ctx.accounts.magic_program.to_account_info())
-    .invoke_signed(&[&[ACCOUNT_SEED, &[ctx.bumps.my_account]]])?;
-
-    // 2. Commit and undelegate the permissioned account.
-    MagicIntentBundleBuilder::new(
-        ctx.accounts.payer.to_account_info(),
-        ctx.accounts.magic_context.to_account_info(),
-        ctx.accounts.magic_program.to_account_info(),
-    )
-    .commit_and_undelegate(&[ctx.accounts.my_account.to_account_info()])
-    .build_and_invoke()?;
-    Ok(())
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + 32,
+        seeds = [ACCOUNT_SEED, authority.key().as_ref()],
+        bump
+    )]
+    pub my_account: Account<'info, MyAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
-#[commit]
+#[delegate]
 #[derive(Accounts)]
-pub struct UndelegatePrivately<'info> {
+pub struct DelegatePrivately<'info> {
+    pub authority: Signer<'info>,
+    /// CHECK: The data PDA to delegate.
+    #[account(
+        mut,
+        del,
+        seeds = [ACCOUNT_SEED, authority.key().as_ref()],
+        bump
+    )]
+    pub my_account: UncheckedAccount<'info>,
+    /// CHECK: Optional target TEE validator, forwarded in DelegateConfig.
+    pub validator: Option<UncheckedAccount<'info>>,
+}
+
+#[account]
+pub struct MyAccount {
+    pub authority: Pubkey,
+}
+```
+
+### 2. Create the ephemeral permission on the ER
+
+Derive `permission` from `[PERMISSION_SEED, my_account.key()]` under
+`PERMISSION_PROGRAM_ID`. Make creation idempotent because clients may retry ER
+transactions. Skip creation only when that PDA is already an initialized
+permission-program account.
+
+```rust
+pub fn init_permission(
+    ctx: Context<PermissionContext>,
+    members: Option<Vec<Member>>,
+) -> Result<()> {
+    let (is_private, members) = match members {
+        Some(members) => (true, members),
+        None => (false, vec![]),
+    };
+    require!(
+        members.len() <= MAX_PERMISSION_MEMBERS,
+        PermissionError::TooManyMembers
+    );
+    if ctx.accounts.permission.owner == &PERMISSION_PROGRAM_ID
+        && !ctx.accounts.permission.data_is_empty()
+    {
+        return Ok(());
+    }
+    let signer_seeds: &[&[u8]] = &[
+        ACCOUNT_SEED,
+        ctx.accounts.my_account.authority.as_ref(),
+        &[ctx.bumps.my_account],
+    ];
+    CreateEphemeralPermissionCpi {
+        payer: ctx.accounts.my_account.to_account_info(),
+        permissioned_account: ctx.accounts.my_account.to_account_info(),
+        permission: ctx.accounts.permission.to_account_info(),
+        vault: ctx.accounts.ephemeral_vault.to_account_info(),
+        magic_program: ctx.accounts.magic_program.to_account_info(),
+        permission_program: ctx.accounts.permission_program.to_account_info(),
+        args: EphemeralMembersArgs { is_private, members },
+    }
+    .invoke_signed(&[signer_seeds])?;
+    Ok(())
+}
+```
+
+### 3. Update the ephemeral permission on the ER
+
+Rebuild the complete member list on every update, including any authority that
+must retain access. Omitting a member revokes that member.
+
+```rust
+pub fn set_permission(
+    ctx: Context<PermissionContext>,
+    is_private: bool,
+    members: Vec<Member>,
+) -> Result<()> {
+    require!(
+        members.len() <= MAX_PERMISSION_MEMBERS,
+        PermissionError::TooManyMembers
+    );
+    let signer_seeds: &[&[u8]] = &[
+        ACCOUNT_SEED,
+        ctx.accounts.my_account.authority.as_ref(),
+        &[ctx.bumps.my_account],
+    ];
+    UpdateEphemeralPermissionCpi {
+        payer: ctx.accounts.my_account.to_account_info(),
+        permissioned_account: ctx.accounts.my_account.to_account_info(),
+        permission: ctx.accounts.permission.to_account_info(),
+        vault: ctx.accounts.ephemeral_vault.to_account_info(),
+        magic_program: ctx.accounts.magic_program.to_account_info(),
+        permission_program: ctx.accounts.permission_program.to_account_info(),
+        authority: ctx.accounts.my_account.to_account_info(),
+        authority_is_signer: false,
+        args: EphemeralMembersArgs { is_private, members },
+    }
+    .invoke_signed(&[signer_seeds])?;
+    Ok(())
+}
+```
+
+### 4. Close the permission on the ER, then undelegate the data PDA
+
+Close the ER-local permission before the data PDA leaves the ER if it is no
+longer needed. Closing refunds its rent to the data PDA. Undelegate only the
+data PDA with `MagicIntentBundleBuilder`; there is no permission undelegation.
+
+```rust
+pub fn close_permission(ctx: Context<PermissionContext>) -> Result<()> {
+    let signer_seeds: &[&[u8]] = &[
+        ACCOUNT_SEED,
+        ctx.accounts.my_account.authority.as_ref(),
+        &[ctx.bumps.my_account],
+    ];
+    CloseEphemeralPermissionCpi {
+        payer: ctx.accounts.my_account.to_account_info(),
+        permissioned_account: ctx.accounts.my_account.to_account_info(),
+        permission: ctx.accounts.permission.to_account_info(),
+        vault: ctx.accounts.ephemeral_vault.to_account_info(),
+        magic_program: ctx.accounts.magic_program.to_account_info(),
+        permission_program: ctx.accounts.permission_program.to_account_info(),
+        authority: ctx.accounts.my_account.to_account_info(),
+        authority_is_signer: false,
+    }
+    .invoke_signed(&[signer_seeds])?;
+    Ok(())
+}
+```
+
+Use a shared ER-side context for the three permission operations:
+
+```rust
+#[derive(Accounts)]
+pub struct PermissionContext<'info> {
     #[account(mut)]
-    pub payer: Signer<'info>,
-    #[account(mut, seeds = [ACCOUNT_SEED], bump)]
+    pub authority: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [ACCOUNT_SEED, my_account.authority.as_ref()],
+        has_one = authority,
+        bump
+    )]
     pub my_account: Account<'info, MyAccount>,
-    /// CHECK: Checked by the permission program
+    /// CHECK: Derived and checked under the Permission Program.
     #[account(
         mut,
         seeds = [PERMISSION_SEED, my_account.key().as_ref()],
         bump,
         seeds::program = permission_program.key()
     )]
-    pub permission: AccountInfo<'info>,
-    /// CHECK: Permission Program
+    pub permission: UncheckedAccount<'info>,
     #[account(address = PERMISSION_PROGRAM_ID)]
     pub permission_program: UncheckedAccount<'info>,
+    #[account(mut, address = EPHEMERAL_VAULT_ID)]
+    pub ephemeral_vault: UncheckedAccount<'info>,
+    #[account(address = MAGIC_PROGRAM_ID)]
+    pub magic_program: UncheckedAccount<'info>,
+}
+
+#[error_code]
+pub enum PermissionError {
+    #[msg("Permission member count exceeds MAX_PERMISSION_MEMBERS")]
+    TooManyMembers,
 }
 ```
+
+Replace `has_one = authority` with the application's actual authorization rule
+when authority is stored elsewhere or controlled by a multisig. Never expose a
+PDA-signed permission CPI through an instruction that lacks application-level
+authorization.
 
 ## Common Gotchas
 
@@ -295,11 +403,10 @@ trait methods on `FoldableIntentBuilder`. Anchor users get this through
 inherent forwarder methods on the builder struct; native Rust call sites
 must add `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;`.
 
-### PER permission updates: keep the permission delegated
-If you only delegate the permissioned account (and not the permission account
-itself), every `UpdatePermission` call has to round-trip to base layer. The
-recommended PER pattern is to delegate both — that way member changes execute
-on the ER and confirm in milliseconds.
+### PER permissions are ephemeral
+Do not create or delegate a base-layer permission account. Delegate the data PDA,
+then create, update, and close its `EphemeralPermission` on the ER. Pre-fund the
+data PDA for permission rent before delegation.
 
 ## Best Practices
 
@@ -309,7 +416,7 @@ on the ER and confirm in milliseconds.
 - Verify delegation status - Check `accountInfo.owner.equals(DELEGATION_PROGRAM_ID)`
 - Wait for state propagation - Add a 3 second sleep after delegate/undelegate in tests before proceeding to the next step
 - Use `GetCommitmentSignature` - Verify commits reached base layer
-- For PER: delegate the permission account alongside the permissioned account so member updates execute on the ER
+- For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
 ### Don'ts
 - Don't send delegate tx to ER - Delegation always goes to base layer
@@ -318,7 +425,7 @@ on the ER and confirm in milliseconds.
 - Don't use `Account<>` in delegate context - Use `AccountInfo` with `del` constraint
 - Don't skip the `#[commit]` macro - Required for undelegate context
 - Don't call deprecated `commit_accounts` / `commit_and_undelegate_accounts` - Use `MagicIntentBundleBuilder` instead
-- Don't update PER permissions on base layer when the permission account is delegated - Update on the ER for sub-second latency
+- Don't create or delegate a base-layer PER permission account - Use the ER-local ephemeral permission lifecycle
 
 ## Commit Sponsorship & Fee Vault
 
