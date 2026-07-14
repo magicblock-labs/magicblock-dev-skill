@@ -19,6 +19,7 @@ REPO_URL="https://github.com/magicblock-labs/magicblock-dev-skill"
 
 # File order matches SKILL.md's "Progressive disclosure" section
 REFERENCES=(
+    "architecture-planning.md"
     "debugging.md"
     "delegation.md"
     "magic-actions.md"
@@ -127,7 +128,7 @@ build_cursor_mdc() {
     {
         cat <<'EOF'
 ---
-description: MagicBlock Ephemeral Rollups development patterns for Solana — delegation flows, Magic Actions, dual-connection architecture, cranks, VRF, lamports top-up, Ephemeral SPL Token smart-contract integration, commit sponsorship, and private payments with swaps. Use when working on MagicBlock or Ephemeral Rollups.
+description: Design, implement, and debug MagicBlock Ephemeral Rollups applications on Solana — architecture planning, account and delegation design, transaction routing, settlement, validation environments, Magic Actions, cranks, VRF, Ephemeral SPL Token integration, sponsorship, and private payments. Use when planning or building with MagicBlock or Ephemeral Rollups.
 globs:
 alwaysApply: false
 ---
