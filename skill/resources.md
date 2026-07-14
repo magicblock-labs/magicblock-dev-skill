@@ -118,8 +118,11 @@ Snapshot verified **2026-07-13** against both package registries and the
 `v0.15.5` SDK tag. Re-check before calling it latest:
 
 ```bash
-cargo search ephemeral-rollups-sdk --limit 1
-npm view @magicblock-labs/ephemeral-rollups-sdk version
+cargo info ephemeral-rollups-sdk@0.15.5
+npm view @magicblock-labs/ephemeral-rollups-sdk@0.15.5 version
+git ls-remote --tags \
+  https://github.com/magicblock-labs/ephemeral-rollups-sdk.git \
+  refs/tags/v0.15.5
 ```
 
 ```toml

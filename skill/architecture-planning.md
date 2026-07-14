@@ -232,87 +232,66 @@ Use <products/features> for <workload>; keep <state> on base layer; settle via <
 ## Architecture manifest template
 
 Emit this YAML when the user requests a durable plan, implementation handoff, or machine-readable
-architecture. Use `unknown` for unresolved strings and `null` for unresolved numeric values. Keep IDs
-stable across revisions.
+architecture. Use `unknown` for unresolved strings (including enum values), `null` for unresolved
+numeric or boolean values, and empty lists for unresolved collections. Replace placeholder IDs once
+their concepts are known, then keep those IDs stable across revisions.
 
 ```yaml
 schema_version: "1"
 application:
   id: "unknown"
   goal: "unknown"
-  network: "devnet"
+  network: "unknown" # unknown | localnet | devnet | mainnet
 
 requirements:
   latency_target_ms: null
   throughput_target_tps: null
-  privacy: "public" # public | permissioned | private
+  privacy: "unknown" # unknown | public | permissioned | private
   settlement_guarantee: "unknown"
   max_uncommitted_seconds: null
 
-products:
-  - id: "ephemeral-rollup"
-    rationale: "unknown"
-    rejected_alternatives: []
+products: []
 
-actors:
-  - id: "user"
-    authority: "wallet"
-    responsibilities: []
+actors: []
 
 accounts:
-  - id: "state"
+  - id: "unknown"
     owner_program: "unknown"
-    derivation: "unknown" # pda | ata | keypair | external
+    derivation: "unknown" # unknown | pda | ata | keypair | external
     authority: "unknown"
-    created_on: "base" # base | er | external
-    persistence: "base-settled" # base-settled | er-only | external
-    er_access: "write" # none | read | write
-    delegated: true
+    created_on: "unknown" # unknown | base | er | external
+    persistence: "unknown" # unknown | base-settled | er-only | external
+    er_access: "unknown" # unknown | none | read | write
+    delegated: null
     delegated_by: "unknown"
-    delegation_group: "primary"
-    privacy: "public" # public | permissioned | private
+    delegation_group: "unknown"
+    privacy: "unknown" # unknown | public | permissioned | private
     commit_policy: "unknown"
     undelegate_policy: "unknown"
     close_policy: "unknown"
     funding_owner: "unknown"
 
-transactions:
-  - id: "initialize"
-    actor: "user"
-    signers: ["user"]
-    writable_accounts: ["state"]
-    destination: "base" # base | router | er | api
-    preconditions: []
-    confirmation: "unknown"
-    retry_policy: "unknown"
-    settlement_effect: "none"
+transactions: []
 
 routing:
-  router_discovery_required: true
-  allow_static_er_endpoint: false
+  router_discovery_required: null
+  allow_static_er_endpoint: null
   compatibility_checks: []
 
 settlement:
-  strategy: "unknown" # per-operation | periodic | checkpoint | terminal
+  strategy: "unknown" # unknown | none | per-operation | periodic | checkpoint | terminal
   triggers: []
   terminal_undelegation_actor: "unknown"
   magic_actions: []
-  commit_sponsor: "default"
+  commit_sponsor: "unknown"
   fee_vault: null
   delegated_fee_payer: null
   recovery_path: "unknown"
 
-external_dependencies:
-  - id: "router"
-    required_for: ["er-endpoint-discovery"]
-    failure_behavior: "unknown"
+external_dependencies: []
 
 validation:
-  - environment: "unit"
-    proves: []
-    command: "unknown"
-    pass_signal: "unknown"
-  - environment: "devnet"
+  - environment: "unknown"
     proves: []
     command: "unknown"
     pass_signal: "unknown"

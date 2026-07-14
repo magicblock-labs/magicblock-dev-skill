@@ -6,6 +6,7 @@ description: Design, implement, and debug MagicBlock Ephemeral Rollups applicati
 # MagicBlock Ephemeral Rollups Skill
 
 ## What this Skill is for
+
 Use this Skill when the user asks for:
 - MagicBlock architecture planning, product selection, account placement, delegation boundaries, or settlement design
 - MagicBlock Ephemeral Rollups integration
@@ -102,6 +103,7 @@ Version-sensitive work: treat versions in this skill as known-good snapshots or 
 ## Operating procedure (how to execute tasks)
 
 ### 0. Plan architecture when the design is not fixed
+
 For a new application, integration design, migration, or implementation plan, read
 [architecture-planning.md](architecture-planning.md) before writing code. Decide whether MagicBlock
 is needed, select the smallest product set, map accounts and transaction routing, define settlement
@@ -109,6 +111,7 @@ and recovery, and choose validation environments. Ask at most three material que
 otherwise proceed with explicit assumptions.
 
 ### 1. Classify the operation type
+
 - Account initialization (base layer)
 - Delegation (base layer)
 - Operations on delegated accounts (ephemeral rollup)
@@ -116,11 +119,13 @@ otherwise proceed with explicit assumptions.
 - Undelegation (ephemeral rollup)
 
 ### 2. Pick the right connection
+
 - Base layer: `https://rpc.magicblock.app/devnet` or `https://rpc.magicblock.app/mainnet`
 - Router: `https://devnet-router.magicblock.app/` or `https://router.magicblock.app/`
 - Ephemeral rollup: the `fqdn` returned by router `getDelegationStatus` for the account
 
 ### 3. Implement with MagicBlock-specific correctness
+
 Always be explicit about:
 - Which connection to use for each transaction
 - Router `getDelegationStatus` checks before operations
@@ -130,6 +135,7 @@ Always be explicit about:
 - For Ephemeral SPL Token flows, keeping the `idempotent` mode consistent across delegate/undelegate/withdraw, waiting for undelegation commits before withdrawing, and using `ephemeral-spl-api` exports (not copied bytes or guessed seeds) for direct CPI
 
 ### 4. Debug live delegation/routing failures
+
 For `InvalidWritableAccount`, missing private balances, validator mismatch, or
 "account is delegated but ER rejects it" reports:
 - Start from the exact signature or account pubkey.
@@ -139,6 +145,7 @@ For `InvalidWritableAccount`, missing private balances, validator mismatch, or
 - See [debugging.md](debugging.md) for the full runbook.
 
 ### 5. Diagnose possible service-side failures
+
 For unexpected RPC, routing, oracle, or transaction errors that could be service-side:
 - Always fetch current data; do not answer from remembered status. Use the direct JSON API `https://status.magicblock.app/api/services` as the source of truth.
 - Select the same network the code uses: JSON keys are `mainnet` and `devnet`.
@@ -152,17 +159,20 @@ For unexpected RPC, routing, oracle, or transaction errors that could be service
 - For direct ER RPC endpoints, optionally correlate with JSON-RPC `getHealth` or `getVersion`, but do not let a single RPC probe replace the status API.
 
 ### 6. Add appropriate features
+
 - Cranks for recurring automated transactions
 - VRF for verifiable randomness in games/lotteries
 - Private payments API for private transfers and swaps
 
 ### 7. Deliverables expectations
+
 When you implement changes, provide:
 - Exact files changed + diffs
 - Commands to install/build/test
 - Risk notes for anything touching delegation/signing/state commits
 
 ## Progressive disclosure (read when needed)
+
 - Architecture planning, output templates, and validation-environment selection: [architecture-planning.md](architecture-planning.md)
 - Debugging ER/delegation failures: [debugging.md](debugging.md)
 - Core delegation patterns: [delegation.md](delegation.md)
