@@ -85,11 +85,15 @@ that must be cloned, preloaded, passed through an oracle, or moved to a post-com
 
 Treat `delegation_group` as a logical architecture label, not an onchain protocol object.
 
-For the current PER flow, pre-fund and delegate the protected account, then create its ephemeral
+For the ER-local PER flow, pre-fund and delegate the protected account, then create its ephemeral
 permission directly on the ER. Record the delegated PDA that signs and pays rent, the members and
 visibility flags, and the close/refund step before terminal cleanup. For tokens, distinguish canonical
 base-layer custody from the delegated token representation used on the ER. For ER-only ephemeral
 accounts, record the sponsor and close/refund path; do not assign a commit or undelegation policy.
+
+If state must remain private until a later event, identify which bytes may settle publicly. Do not
+commit plaintext private state before disclosure; split transient private state from its public
+settlement representation, or scrub sensitive fields before commit or undelegation.
 
 ### 5. Map transaction routing and lifecycle
 
@@ -118,6 +122,9 @@ Specify:
 - timeout, retry, idempotency, cancellation, and refund paths
 - monitoring for base ownership, router status, ER ownership, commit progress, and service health
 - manual recovery path and the actor authorized to use it
+
+For multi-batch settlement, define the authoritative finality marker, bounded batch and finalizer
+limits, provisional-versus-final user semantics, and recovery from a partially committed batch set.
 
 Treat the base layer as the settlement and recovery boundary for persistent delegated state. Mark
 ER-only ephemeral accounts as intentionally non-settling. State where temporary ER state can be lost
