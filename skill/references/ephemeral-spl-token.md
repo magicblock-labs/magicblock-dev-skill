@@ -13,8 +13,10 @@ Sources of truth:
 2. **TypeScript SDK**: `@magicblock-labs/ephemeral-rollups-sdk` — high-level
    `delegateSpl` / `transferSpl` / `undelegateIx` / `withdrawSpl` helpers plus
    per-instruction builders and PDA derivations.
-3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` — end-to-end
-   Anchor program + tests exercising the full lifecycle.
+3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` at engine-examples revision
+   `1d11428` — end-to-end Anchor program + tests exercising the full lifecycle. At that revision its
+   Rust program pins SDK `0.14.3`, its root TS package pins `0.14.3`, and its app pins `0.15.3`; treat
+   those as example provenance, not as the dependency snapshot below.
 
 SDK version example, verified 2026-07-13: TS + Rust
 `ephemeral-rollups-sdk` **0.15.5**, with Anchor **1.0.2** for modern Anchor
@@ -23,7 +25,18 @@ task explicitly requests an upgrade; see [resources.md](resources.md).
 
 Program ID (all clusters): `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`
 
-## Two Mental Models — Pick One First
+## Contents
+
+- [Integration models](#integration-models)
+- [Model A: SDK lifecycle](#model-a-sdk-lifecycle)
+- [Model B: direct program surface](#model-b-direct-program-surface)
+- [Queued private settlement](#queued-private-settlement)
+- [Public instruction groups](#public-instruction-groups)
+- [Native SOL and WSOL](#native-sol-and-wsol)
+- [Recovery map](#recovery-map)
+- [Implementation checklist](#implementation-checklist)
+
+## Integration models
 
 **Model A — SDK lifecycle (default).** Clients drive the whole lifecycle with
 SDK helpers: `delegateSpl` (deposit + delegate), `transferSpl`, `undelegateIx`,
@@ -32,22 +45,24 @@ token account at the owner's canonical ATA address** — clients read it with
 `getAccount(erConnection, ata)`, and app programs move it with a plain SPL
 Token CPI. You never derive an eATA or vault PDA, and your program never calls
 the Ephemeral SPL Token program. Use this for games, payments, and any app
-that just needs token balances usable on the ER.
+that needs token balances on the ER.
 
 **Model B — direct program surface.** A smart contract (or bespoke client)
 talks to the Ephemeral SPL Token program itself: derive the **eATA PDA**
 (seeds `[owner, mint]`) and per-mint **global vault PDA** (seeds `[mint]`),
 build instruction data from the `ephemeral-spl-api` crate, and wire exact
-account metas. Use this only when Model A's helpers can't express the flow —
+account metas. Use this only when Model A's helpers cannot express the flow:
 on-chain deposit/withdraw orchestration, transfer queues, shuttles, or custom
 vault logic.
 
 Both models share the same base-layer state: deposited tokens are locked in
 the global vault, the user's balance is recorded in the eATA, and the eATA is
-delegated to the delegation program. Undelegate + withdraw commits ER state
-back to base and releases tokens from the vault to the owner's real ATA. The
-difference is purely which surface you touch: canonical ATAs + SDK helpers
-(A) versus raw PDAs + program instructions (B).
+delegated to the delegation program. Withdrawal releases tokens from the vault
+to the owner's real ATA, either through the default shuttle builder or through
+an explicit legacy undelegate, base confirmation, and direct withdrawal. The
+difference between the models is which incompatible integration surface you touch: canonical ATAs + SDK helpers
+(A) versus explicit eATA/global-vault PDAs + program instructions (B). Canonical-ATA guidance in this
+file applies only to Model A.
 
 ---
 
@@ -61,9 +76,10 @@ difference is purely which surface you touch: canonical ATAs + SDK helpers
 | Deposit + delegate | `delegateSpl(...)` | Base | owner (+ payer) |
 | Transfer inside ER | `transferSpl(...)` or app program | ER | from-owner |
 | Read ER balance | `getAccount(erConnection, ata)` | ER | — |
-| Undelegate | `undelegateIx(owner, mint)` | ER | owner |
-| Wait for commit | `GetCommitmentSignature(sig, erConnection)` | ER → Base | — |
-| Withdraw | `withdrawSpl(...)` | Base | owner |
+| Default withdrawal | `withdrawSpl(...)` | Base | owner (+ payer) |
+| Legacy undelegate | `undelegateIx(owner, mint)` | ER | owner |
+| Legacy commit extraction/confirmation | `GetCommitmentSignature(...)`, then base confirmation | ER read, then Base | — |
+| Legacy withdrawal | `withdrawSpl(..., { idempotent: false })` | Base | owner |
 
 ## Client Integration (TypeScript)
 
@@ -151,18 +167,18 @@ resolving via `getIdentity`.
 ```typescript
 const delegateOpts = {
   validator,                    // ER validator pubkey
-  idempotent: false as const,   // legacy vault flow — see mode note below
+  idempotent: false as const,   // choose the legacy deposit builder for this example
   payer: admin.publicKey,
 };
 
-// First delegation for a mint creates the shared vault; later ones reuse it.
+// Initialize the shared vault if absent. Each builder decides whether
+// repeated initialization is idempotent; inspect existing state first.
 const ixs = await delegateSpl(owner.publicKey, mint, 50n, {
   ...delegateOpts,
-  initVaultIfMissing: true,     // true ONLY for the first delegation per mint
+  initVaultIfMissing: true,
 });
 await provider.sendAndConfirm(new Transaction().add(...ixs), [owner, admin], {
   commitment: "confirmed",
-  skipPreflight: true,
 });
 ```
 
@@ -180,6 +196,7 @@ const transferIxs = await transferSpl(fromOwner.publicKey, toOwner.publicKey, mi
 });
 await erProvider.sendAndConfirm(new Transaction().add(...transferIxs), [fromOwner], {
   commitment: "confirmed",
+  // Use only when this ER cannot simulate the transaction correctly.
   skipPreflight: true,
 });
 
@@ -189,11 +206,20 @@ const erBalance = (await getAccount(erConnection, ata)).amount;
 
 For ephemeral→ephemeral public transfers this builds a plain SPL transfer
 between the canonical ATAs — which is why an app program can do the same via
-CPI (next section). `transferSpl` also routes base→ephemeral, base→base, and
-`visibility: "private"` variants (queued private transfers via
-`privateTransfer: { minDelayMs, maxDelayMs, split }`).
+CPI (next section). The current helper supports public base→base and
+ephemeral→ephemeral routes. Cross-layer routes are private queued workflows;
+do not assume a public base→ephemeral or ephemeral→base route exists. The SDK helper throws an ordinary
+`Error` for an unsupported combination; `UNSUPPORTED_TRANSFER_ROUTE` is an HTTP Payments API error code,
+not an SDK guarantee. Private variants use
+`privateTransfer: { minDelayMs, maxDelayMs, split }`.
 
-### Undelegate, Wait for Commit, Withdraw
+### Withdrawal Paths
+
+The default `withdrawSpl(...)` builder uses the delegated-shuttle withdrawal path. Submit those
+instructions on base; the helper builds the shuttle orchestration and does not require a preceding
+`undelegateIx` call.
+
+Use the legacy path when the application explicitly needs the direct eATA lifecycle shown below:
 
 ```typescript
 // 1. Undelegate on the ER — ONE owner per transaction (combined undelegates
@@ -203,8 +229,14 @@ for (const owner of owners) {
   const sgn = await erProvider.sendAndConfirm(
     new Transaction().add(undelegateIx(owner.publicKey, mint)),
     [owner],
-    { commitment: "confirmed", skipPreflight: true },
+    {
+      commitment: "confirmed",
+      // Use only when this ER cannot simulate the undelegation correctly.
+      skipPreflight: true,
+    },
   );
+  // This reads the ER transaction/logs and extracts the base signature; it
+  // does not confirm that base transaction.
   commits.push(await GetCommitmentSignature(sgn, erConnection));
 }
 
@@ -222,13 +254,15 @@ await provider.sendAndConfirm(new Transaction().add(...withdrawIxs), [owner], {
 });
 ```
 
-### Mode Consistency: `idempotent` Flag
+### Builder Selection: `idempotent` Flag
 
-`delegateSpl` has two account layouts: the default **idempotent shuttle path**
-and the **legacy vault path** (`idempotent: false`). The undelegate/withdraw
-calls must match the mode used at delegation — the example's
-`undelegateIx`/`withdrawSpl` flow above pairs with `idempotent: false`. Pick
-one mode per flow and keep delegate, undelegate, and withdraw consistent.
+`idempotent` is a per-call builder selector; the helper does not write that choice into account state.
+`delegateSpl(...)`
+independently chooses the default shuttle deposit builder or the legacy direct builder when
+`idempotent: false`. `withdrawSpl(...)` independently chooses the default shuttle withdrawal builder
+or the legacy direct withdrawal builder when `idempotent: false`. `undelegateIx(owner, mint)` has no
+mode flag; it is the explicit undelegation step used before the legacy direct withdrawal. Do not infer
+a stored account mode from a prior helper call.
 
 ## App Program Over Delegated Token Accounts (Anchor)
 
@@ -319,7 +353,7 @@ client-side around the app program.
 
 # Model B: Direct Program Surface
 
-Only reach for this when Model A's helpers can't express the flow. Everything
+Use this only when Model A's helpers cannot express the flow. Everything
 here works in terms of the program's own PDAs, not canonical ATAs.
 
 ### State Model
@@ -331,6 +365,32 @@ here works in terms of the program's own PDAs, not canonical ATAs.
 | Vault token account | ATA of `(vault, mint)` | the actual locked SPL tokens for the whole mint |
 | Rent PDA | `[b"rent"]` | lamports sponsoring shuttle/queue rent |
 | Transfer queue | `[b"queue", mint, validator]` | queued delayed transfers |
+
+## Queued Private Settlement
+
+Private and cross-layer transfers cannot always complete as one synchronous token movement. They use
+a validator-scoped queue so timing/splits can obscure the direct sender→recipient link and so work that
+must cross runtime boundaries can be scheduled safely.
+
+The observable lifecycle is:
+
+1. The source transaction validates and escrows/debits the amount, creates a group receipt for the
+   requested splits, and enqueues transfers with randomized ready timestamps.
+2. The recurring queue crank observes a ready entry and schedules a standalone settlement action.
+3. The queue entry is popped **when execution is scheduled**, before the payout result is known. Queue
+   absence therefore does not prove recipient credit.
+4. The authenticated callback records a `TransferReceipt` in the temporary `GroupReceipt`.
+5. A failed payout enters the current refund/recovery path. Retry limits are implementation- and
+   version-specific; inspect the pinned program before promising an exact count.
+6. When every split callback has been recorded, the group receipt is closed. Treat destination state,
+   callback logs/receipts, and refund state—not queue length alone—as settlement evidence.
+
+`minDelayMs`/`maxDelayMs` choose when a split becomes eligible to be scheduled. They are not a strict
+completion SLA: scheduler availability, action execution, callbacks, and retries can add time. Product
+UIs need pending, settled, and refunded/failed states plus a reconciliation path.
+
+For multi-split payments, do not mark the group settled after the first credit. Correlate every split
+with its group/client reference and reconcile the total amount.
 
 ### Rust CPI via `ephemeral-spl-api`
 
@@ -400,9 +460,63 @@ The SDK also exposes Model B client-side, mirroring the raw instructions
   `undelegateEataPermissionIx`).
 - State decoders: `decodeEphemeralAta`, `decodeGlobalVault`.
 
+## Public Instruction Groups
+
+The checked-in IDL or an old copied discriminator list can lag the program. Use the current
+`ephemeral-spl-api::instruction::ESplInstruction` enum and current tests. The present public surface is
+grouped as follows (discriminator `18` is unused; `196` and `201+` are internal callbacks/actions):
+
+| Group | Instructions | Typical use |
+|---|---|---|
+| Core balance | `0`–`5`, `10` | Initialize eATA/vault, deposit, withdraw, delegate, undelegate, close |
+| PER permissions | `6`–`9` | Create, delegate, undelegate, or reset an eATA permission |
+| Shuttle lifecycle | `11`, `13`–`15`, `24`–`26`, `32` | Single-use accounts for cross-layer deposit/merge/withdraw and permissionless recovery |
+| Transfer queues | `12`, `16`, `17`, `19`, `27`, `28` | Initialize/delegate/grow/refill a queue and enqueue delayed transfers |
+| Sponsored SOL | `20`, `23` | Fund delegated destinations and initialize the rent sponsor |
+| Stealth pools | `21`, `22` | Ensure/delegate a pool and update its ER-local destination set |
+| Private swap delivery | `29`–`31` | Schedule, execute, and clean up stash-based private transfer delivery |
+
+High-level SDK/API helpers are the default because these instructions have exact ordered accounts,
+encryption payloads, PDAs, and callback assumptions. Direct CPI is appropriate only when the product
+requires orchestration the helper does not expose.
+
+## Native SOL and WSOL
+
+The SPL routes represent SOL with the native WSOL mint
+`So11111111111111111111111111111111111111112`. The current Payments API prepares the owner's WSOL
+ATA, transfers missing lamports into it, and syncs the account when a SOL deposit or supported private
+base-source transfer lacks enough wrapped balance. It also tops up the rent PDA when required.
+
+Current settlement behavior is route-sensitive:
+
+- A legacy-builder (`idempotent: false`) API withdrawal appends a close of the owner's WSOL ATA so the
+  withdrawn value returns as native SOL.
+- A queued WSOL payout attempts native-lamport delivery when the recipient is a System Program account
+  and the transfer can satisfy account-creation rent rules. Otherwise it preserves token delivery.
+- Public swaps can request wrap/unwrap behavior, but the private-swap path rejects
+  `nativeDestinationAccount`.
+
+Always observe whether the chosen route delivered wallet lamports or WSOL. Do not model them as the
+same balance, and do not promise direct native delivery without checking route eligibility.
+
+## Recovery Map
+
+| Incomplete state | Evidence | Recovery owner/action |
+|---|---|---|
+| Deposit/delegation transaction failed | Base signature/logs; source/vault/eATA unchanged | Rebuild from current accounts and deliberately select the appropriate deposit builder |
+| Shuttle delegated but merge/cleanup incomplete | Router status plus shuttle metadata/eATA/wallet ATA | Use the current SDK/API shuttle merge or undelegate-and-close path; never guess seeds/account order |
+| Shuttle already undelegated but funds/accounts remain | Base ownership plus nonzero shuttle eATA or wallet ATA | Public instruction `32` permissionlessly settles both balances to an owner-controlled token account and closes the shuttle accounts |
+| Queue item scheduled but destination not credited | Missing payout callback/destination delta; queue item may already be gone | Follow group/client reference, callback logs, and automatic refund path; escalate after retry exhaustion |
+| Scheduled private-swap stash times out | Stash/stash ATA still funded; timeout callback result | Current instruction `30` refunds stash ATA balance to the user's ATA after timeout; reconcile cleanup via `31` |
+| eATA undelegated but withdrawal fails | Base owner restored; vault and destination balances unchanged | After confirming the commit, retry the legacy direct withdrawal with `idempotent: false` |
+| Rent/fee sponsor depleted | Rent PDA or fee vault balance and failed action logs | Refill through the documented sponsor path, then retry only an idempotent operation |
+
+Persist operation identifiers and every base/ER signature outside temporary group receipts. Group
+receipts close after all callbacks, so they are execution coordination—not durable payment history.
+
 ---
 
-## Common Gotchas
+## Implementation checklist
 
 - **Pin the same `validator` across a flow** — one ER transaction can only
   write accounts delegated to its own validator, and the transfer queue is
@@ -410,9 +524,9 @@ The SDK also exposes Model B client-side, mirroring the raw instructions
   endpoint and pass it to every `delegateSpl`. If you delegated unpinned
   (default config), confirm via router `getDelegationStatus` that all
   interacting accounts share the same `fqdn` first.
-- **`initVaultIfMissing: true` exactly once per mint** — the first delegation
-  creates the shared vault; passing `true` again is the idempotent path's job,
-  in the legacy flow subsequent delegations use `false`.
+- **Treat `initVaultIfMissing` as builder-specific initialization** — inspect whether the shared vault
+  exists. The shuttle deposit builder can use its initialization path; the legacy deposit builder may
+  require later delegations to pass `false`. Do not promise an exactly-once call rule.
 - **Fund the rent PDA before delegating** on fresh/local clusters — shuttle
   rent is sponsored from `deriveRentPda()`; an unfunded rent PDA fails the
   deposit flow.
@@ -425,18 +539,24 @@ The SDK also exposes Model B client-side, mirroring the raw instructions
 - **Blockhash must come from the connection you send to** — ER transactions
   need `erConnection.getLatestBlockhash()`; mixing endpoints produces
   blockhash-not-found or stale-state errors.
-- **`skipPreflight: true` for ER transactions** and for delegation
-  transactions on base.
-- **Keep the `idempotent` mode consistent** across delegate → undelegate →
-  withdraw; the two modes use different account layouts.
+- **Scope `skipPreflight` narrowly** — preserve preflight for supported base delegation/deposit
+  transactions. Use `skipPreflight: true` only for ER transactions with a known simulation
+  incompatibility, and inspect execution logs.
+- **Choose each lifecycle builder deliberately** — the default withdrawal is a shuttle flow. The
+  legacy flow is explicit `undelegateIx` on the ER, base confirmation of its commit, then
+  `withdrawSpl(..., { idempotent: false })` on base. `undelegateIx` has no stored mode to match.
 - **Verify balances against the right endpoint** — ER balances via the ER
   connection, base balances via the base connection; the other side is stale
   by design until commit.
 - **Token vs Token-2022**: keep the token program consistent across mint,
-  ATAs, vault, and CPIs; don't mix within one flow.
-- **Private transfers settle later, not immediately** — queued private
-  transfers execute within the `[minDelayMs, maxDelayMs]` window; don't assert
-  destination balances right after sending.
-- **Don't mix models** — an app program in Model A should never derive eATA or
+  ATAs, vault, and CPIs.
+- **Native SOL is represented as WSOL** — distinguish wallet lamports from the native-mint ATA and
+  define who unwraps after withdrawal or delivery.
+- **Private transfers settle later, not immediately** — the delay window controls
+  eligibility for scheduling, not guaranteed completion. Do not assert destination
+  balances right after sending; observe all split callbacks/destination credits or refund state.
+- **Queue removal is not payout completion** — a ready item is popped when its action is scheduled.
+  Reconcile with receipts, destination state, callbacks, and refunds.
+- **Do not mix models** — an app program in Model A should never derive eATA or
   vault PDAs; a Model B contract must not assume canonical-ATA balances exist
   on base layer.

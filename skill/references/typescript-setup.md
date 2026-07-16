@@ -109,7 +109,6 @@ async function buildDelegateTx(payer: PublicKey, uid: string): Promise<Transacti
 
 // Send to BASE LAYER
 const txHash = await baseProvider.sendAndConfirm(tx, [], {
-  skipPreflight: true,
   commitment: "confirmed",
 });
 ```
@@ -122,11 +121,13 @@ let tx = await program.methods
   .accounts({ myAccount: pda })
   .transaction();
 
-// CRITICAL: Use ephemeral rollup connection
+// Use the ephemeral rollup connection.
 tx.feePayer = erProvider.wallet.publicKey;
 tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
 tx = await erProvider.wallet.signTransaction(tx);
 
+// Some ER paths cannot be simulated faithfully. Use skipPreflight only for a
+// known incompatibility, then inspect the executed transaction logs.
 const txHash = await erProvider.sendAndConfirm(tx, [], { skipPreflight: true });
 ```
 
@@ -152,8 +153,10 @@ async function buildUndelegateTx(payer: PublicKey, pda: PublicKey): Promise<Tran
 // Send to EPHEMERAL ROLLUP
 const txHash = await erProvider.sendAndConfirm(tx, [], { skipPreflight: true });
 
-// Wait for commitment on base layer
+// Extract the base signature from the ER transaction/logs. This does not
+// confirm the base transaction.
 const commitTxHash = await GetCommitmentSignature(txHash, erConnection);
+await baseConnection.confirmTransaction(commitTxHash, "confirmed");
 ```
 
 ## Key Program IDs

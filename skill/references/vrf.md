@@ -2,11 +2,30 @@
 
 VRF provides provably fair randomness for games, lotteries, and any application requiring verifiable randomness.
 
+The request transaction and randomness callback are separate executions. A successful request means
+the oracle accepted the work; the application outcome exists only after the authenticated callback
+updates state.
+
+## Contents
+
+- [Dependencies](#dependencies)
+- [Request randomness](#request-randomness)
+- [Consume randomness callback](#consume-randomness-callback)
+- [Two required macros](#two-required-macros)
+- [Oracle queue constants](#oracle-queue-constants)
+- [Request lifecycle and recovery](#request-lifecycle-and-recovery)
+- [Non-Anchor programs](#non-anchor-pinocchio--native-programs)
+- [Key points](#key-points)
+
 ## Dependencies
 
 In the SDK v0.15.5 snapshot verified 2026-07-13, VRF is exposed through the
 main SDK. Enable its `vrf` feature; Anchor programs using this snapshot do not
 need a direct `ephemeral-vrf-sdk` dependency.
+
+The `magicblock-engine-examples/roll-dice/anchor` example at revision `1d11428` separately pins Rust
+SDK `0.15.4` and app TypeScript SDK `0.14.3`. Treat those as example provenance, not as the dependency
+version for the `0.15.5` snippets below.
 
 ```toml
 [dependencies]
@@ -98,13 +117,13 @@ pub struct CallbackRollDiceCtx<'info> {
 
 ## Two required macros
 
-Both contexts need a macro; the callback one is the one people forget:
+Both contexts require a macro:
 
 - **`#[vrf]`** on the *request* context — injects the `program_identity`, `vrf_program`,
   `slot_hashes`, and `system_program` accounts plus the `invoke_signed_vrf` helper. Omit it and
-  `invoke_signed_vrf` doesn't exist, so the program won't compile.
+  `invoke_signed_vrf` does not exist, so the program will not compile.
 - **`#[vrf_callback]`** on the *callback* context — injects a `vrf_program_identity: Signer` bound
-  to this program's scoped identity PDA, so you don't hand-write it. Omit it and the struct still
+  to this program's scoped identity PDA. Omit it and the struct still
   compiles, but the callback has no identity check and accepts spoofed randomness.
 
 ## Oracle Queue Constants
@@ -145,6 +164,28 @@ VRF is also supported outside Anchor via the `ephemeral-rollups-pinocchio` crate
 `scoped_vrf_identity(program_id)` instead of relying on the `#[vrf_callback]` macro. See the
 Pinocchio `roll-dice` example in the engine examples repo.
 
+## Request Lifecycle and Recovery
+
+Persist enough state to correlate one request with one permitted callback. Use this state machine:
+
+`idle → requested(request identity/nonce) → fulfilled` with an explicit timeout/retry or cancel path.
+
+- Reject a second live request unless the product intentionally supports concurrency.
+- Bind callback effects to the expected request/user/object, not only to a valid VRF signer.
+- Make callback processing idempotent: a duplicate callback must not pay, mint, advance, or settle twice.
+- Decide when a request is considered timed out and who may retry it.
+- If retrying creates a new request, invalidate or distinguish the old request so late delivery cannot
+  satisfy the new operation.
+- Keep the callback's account list and compute small enough to execute reliably. Move unrelated work to
+  a later user action or a deliberately designed Magic Action/commit path.
+- Record request and fulfillment identifiers/timestamps needed for support and reconciliation.
+
+A callback failure is not repaired merely because the request transaction succeeded. Monitor callback
+transactions and expose a product state such as “randomness pending” rather than showing a final result.
+
+Validate the request path, authenticated callback, spoofed callback, duplicate callback, two concurrent
+requests, timeout, late callback after retry, callback program error, wrong queue/runtime, and recovery.
+
 ## Key Points
 
 - VRF provides cryptographically verifiable randomness.
@@ -153,3 +194,5 @@ Pinocchio `roll-dice` example in the engine examples repo.
 - Use `DEFAULT_EPHEMERAL_QUEUE` when requesting from inside the ephemeral rollup (the queue is delegated to the ER).
 - Use `DEFAULT_QUEUE` when requesting from the base layer (Solana).
 - `caller_seed` adds client-side entropy; `callback_args` forwards extra data to the callback.
+- Treat request acceptance and callback fulfillment as separate observable states.
+- Bind one callback to one request and make its economic effects idempotent.

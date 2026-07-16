@@ -32,9 +32,9 @@ use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 
 > The free functions `commit_accounts` and `commit_and_undelegate_accounts`
 > are deprecated. Schedule commit / undelegate intents through
-> `MagicIntentBundleBuilder`. The builder
-> exposes inherent `build`, `build_and_invoke`, and `build_and_invoke_signed`
-> methods for Anchor; native Rust call sites must additionally
+> `MagicIntentBundleBuilder`. The chained commit methods come from
+> `FoldableIntentBuilder`. Inside a module marked `#[ephemeral]`, the macro
+> injects that trait import. Native Rust call sites must import it explicitly:
 > `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;`.
 
 ### Program Macros
@@ -151,7 +151,7 @@ const MAX_PERMISSION_MEMBERS: usize = 8;
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     transfer(
         CpiContext::new(
-            ctx.accounts.system_program.key(),
+            ctx.accounts.system_program.to_account_info(),
             Transfer {
                 from: ctx.accounts.authority.to_account_info(),
                 to: ctx.accounts.my_account.to_account_info(),
@@ -367,7 +367,7 @@ when authority is stored elsewhere or controlled by a multisig. Never expose a
 PDA-signed permission CPI through an instruction that lacks application-level
 authorization.
 
-## Common Gotchas
+## Common errors
 
 ### Method Name Convention
 The delegate method is auto-generated as `delegate_<field_name>`:
@@ -387,9 +387,14 @@ ctx.accounts.delegate_tomo(&payer, &[b"tomo", uid.as_bytes()], config)?;
 
 ### Account Owner Changes on Delegation
 ```
-Not delegated: account.owner == YOUR_PROGRAM_ID
-Delegated:     account.owner == DELEGATION_PROGRAM_ID
+Not delegated, base: account.owner == YOUR_PROGRAM_ID
+Delegated, base:     account.owner == DELEGATION_PROGRAM_ID
+Delegated, ER:       account.owner == YOUR_PROGRAM_ID
 ```
+
+The layer-specific owner difference is a routing and lifecycle signal. It does not replace application
+authorization: instructions executing on the ER must enforce the same signer, authority, PDA, and
+account constraints they require on Solana.
 
 ### MagicIntentBundleBuilder takes owned `AccountInfo`
 The builder's `new` and `commit` / `commit_and_undelegate` methods take owned
@@ -397,58 +402,60 @@ The builder's `new` and `commit` / `commit_and_undelegate` methods take owned
 `.clone()` (native Rust) on each account passed in. Anchor's `Account<>` and
 `Signer<>` types coerce via `.to_account_info()`.
 
-### Native Rust requires `FoldableIntentBuilder` in scope
+### `FoldableIntentBuilder` must be in scope
 The chained `.commit(...)` / `.commit_and_undelegate(...)` methods are
-trait methods on `FoldableIntentBuilder`. Anchor users get this through
-inherent forwarder methods on the builder struct; native Rust call sites
-must add `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;`.
+trait methods on `FoldableIntentBuilder`. The `#[ephemeral]` macro injects the
+trait import inside the annotated Anchor program module. Native Rust call sites
+must add `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;` explicitly.
 
 ### PER permissions are ephemeral
 Do not create or delegate a base-layer permission account. Delegate the data PDA,
 then create, update, and close its `EphemeralPermission` on the ER. Pre-fund the
 data PDA for permission rent before delegation.
 
-## Best Practices
+## Implementation checklist
 
-### Do's
-- Always use `skipPreflight: true` - Faster transactions, ER handles validation
+### Required
+- Keep preflight enabled for supported base-layer transactions. Use
+  `skipPreflight: true` only when the selected ER path has a known simulation
+  incompatibility, and inspect the executed transaction logs afterward
 - Use dual connections - Base layer for delegate, ER for operations/undelegate
-- Verify delegation status - Check `accountInfo.owner.equals(DELEGATION_PROGRAM_ID)`
+- Verify delegation for routing/debugging - Query router status and compare the base and ER owners;
+  do not use delegation itself as application authorization
 - Wait for state propagation - Add a 3 second sleep after delegate/undelegate in tests before proceeding to the next step
-- Use `GetCommitmentSignature` - Verify commits reached base layer
+- Use `GetCommitmentSignature` to extract the base signature from ER logs, then
+  confirm that returned signature separately on the base connection
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
-### Don'ts
-- Don't send delegate tx to ER - Delegation always goes to base layer
-- Don't send operations to base layer - Delegated account ops go to ER
-- Don't forget the `#[ephemeral]` macro - Required on program module
-- Don't use `Account<>` in delegate context - Use `AccountInfo` with `del` constraint
-- Don't skip the `#[commit]` macro - Required for undelegate context
-- Don't call deprecated `commit_accounts` / `commit_and_undelegate_accounts` - Use `MagicIntentBundleBuilder` instead
-- Don't create or delegate a base-layer PER permission account - Use the ER-local ephemeral permission lifecycle
+### Avoid
+- Sending delegation transactions to the ER; delegation runs on base layer
+- Sending delegated-account operations to base layer; they run on the ER
+- Omitting `#[ephemeral]` from the program module
+- Using `Account<>` in the delegation context; use `AccountInfo` with the `del` constraint
+- Omitting `#[commit]` from the undelegation context
+- Calling deprecated `commit_accounts` or `commit_and_undelegate_accounts`; use `MagicIntentBundleBuilder`
+- Creating or delegating a base-layer PER permission account; permissions are ER-local
 
 ## Commit Sponsorship & Fee Vault
 
-MagicBlock sponsors **10 commits per delegated account by default** — each
-delegation comes with 10 free commits to base layer at no cost. This is
-enough for most short-lived delegations (e.g., a single game session).
+MagicBlock sponsors **10 commits per delegated account by default**. Each delegation receives 10
+base-layer commits without an application-funded fee vault.
 
 When the sponsored quota is exhausted, you have two options:
 
 ### Option 1: Re-delegate to refresh the quota
 
 Undelegating and re-delegating the account refreshes the sponsored commit
-allowance. This is the simplest path for flows that already cycle through
+allowance. This fits flows that already cycle through
 delegation boundaries (session start → play → session end → next session).
-No extra accounts, no extra builder methods — just call `delegate` again.
+No fee-vault accounts or builder methods are required; delegate the account again.
 
 ### Option 2: Pay your own commits via `magic_fee_vault` + delegated fee payer
 
 For long-lived delegations or high commit frequency, attach a
 `magic_fee_vault` to the intent bundle and use a delegated fee payer (a
-PDA payer that signs via seeds). This lifts the sponsored cap — commits
-are paid out of the fee vault instead of MagicBlock's sponsorship pool, so
-there's no per-account quota.
+PDA payer that signs via seeds). This lifts the sponsored cap: the delegated
+payer pays the commit fee, and the validator-scoped fee vault receives it.
 
 #### Deriving the fee vault PDA
 
@@ -500,7 +507,8 @@ MagicIntentBundleBuilder::new(
 ```
 
 The fee vault must be passed in the outer instruction's accounts context
-as a writable `AccountInfo` (it has lamports debited on each commit).
+as a writable `AccountInfo`. It is credited on each paid commit; the delegated
+payer is debited.
 
 #### When to pick which option
 

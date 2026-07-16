@@ -91,14 +91,13 @@ For a properly delegated account, expect this cross-chain shape:
   `delegated=true`. If the ER clone arrives as non-delegated, later writable use
   can fail even though the router still reports the account delegated.
 
-This means base ownership by the delegation program is not a bug by itself. The
-bug is a mismatch: router says delegated, but the chosen ER endpoint does not
-have the account locally cloned as a delegated/mutable account.
+Base ownership by the delegation program is expected. Investigate a mismatch when the router reports
+delegation but the selected ER endpoint lacks a delegated, mutable clone.
 
 ## Fast Investigation Runbook
 
-1. Start from the exact failing signature or account pubkey. If the user only
-   says "delegation is broken", ask for one of those before theorizing.
+1. Start from the exact failing signature or account pubkey. Request one before diagnosing a generic
+   delegation failure.
 2. Fetch router status with `getDelegationStatus`; save `isDelegated`,
    `fqdn`, `authority`, `owner`, and `delegationSlot`.
 3. Query the base account on the MagicBlock base RPC:
@@ -138,8 +137,10 @@ have the account locally cloned as a delegated/mutable account.
 
 ## Common Failure Patterns
 
-- `InvalidWritableAccount`: search transaction logs for
-  `Account <index>: <pubkey> was illegally used as writable`. Then compare
+- `InvalidWritableAccount`: this commonly appears only in `meta.err`; do not expect a fabricated
+  account-index log line. Inspect the real `logMessages` and failing instruction index. A confined
+  schedule-commit path may log
+  `ScheduleCommit ERR: account <pubkey> is confined and cannot be committed`. Then compare
   router status, base ownership, ER ownership, and ER-local delegated state.
   Router `isDelegated: true` alone does not prove the ER bank has synchronized
   mutability for that account.
