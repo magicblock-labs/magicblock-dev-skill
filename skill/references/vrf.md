@@ -85,8 +85,10 @@ pub struct DoRollDiceCtx<'info> {
     #[account(
         mut,
         constraint =
-            oracle_queue.key() == vrf::consts::DEFAULT_QUEUE ||     // Devnet / Mainnet
-            oracle_queue.key() == vrf::consts::DEFAULT_TEST_QUEUE   // Localnet
+            oracle_queue.key() == vrf::consts::DEFAULT_QUEUE ||
+            oracle_queue.key() == vrf::consts::DEFAULT_EPHEMERAL_QUEUE ||
+            oracle_queue.key() == vrf::consts::DEFAULT_TEST_QUEUE ||
+            oracle_queue.key() == vrf::consts::DEFAULT_EPHEMERAL_TEST_QUEUE
     )]
     pub oracle_queue: UncheckedAccount<'info>,
 }

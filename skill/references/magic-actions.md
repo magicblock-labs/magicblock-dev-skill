@@ -213,24 +213,29 @@ MagicIntentBundleBuilder::new(
 ## Common errors
 
 ### `#[action]` is required on the target instruction's accounts context
+
 Without `#[action]`, the SDK cannot dispatch into the instruction from a post-commit action.
 
 ### `is_writable` must match the action's actual writes
+
 `ShortAccountMeta { is_writable: true }` for any account the action mutates,
 even if the same account also appears in the outer `#[commit]` context with a
 different mutability. The two contexts are independent — the action accounts
 list is what the base-layer transaction sees.
 
 ### Use `[action]` (slice/array) not `vec![action]`
+
 `add_post_commit_actions` takes `IntoIterator<Item = CallHandler>`. Array
 literals are the cleaner form: `.add_post_commit_actions([action])`.
 
 ### PDA escrow authority needs `build_and_invoke_signed`
+
 If `escrow_authority` is a PDA, the outer call must provide PDA seeds via
 `build_and_invoke_signed(payer_seeds)`. Calling `build_and_invoke()` (without
 `_signed`) will fail signature verification at action execution time.
 
 ### Compute units are per-action, not per-bundle
+
 Each action gets its own compute budget. If you chain three actions at
 200,000 CU each, the declared total is 600,000. Increase the budget if any individual
 action does heavy work.
@@ -266,6 +271,7 @@ easier to observe and recover when modeled as separate operations.
 ## Implementation checklist
 
 ### Required
+
 - Use Magic Actions for commit-linked base-layer follow-ups whose delivery is observed and reconciled
 - Keep `escrow_authority` consistent — user wallet for user-paid, PDA for program-paid
 - Pair `add_post_commit_actions` with `commit_and_undelegate` when the
@@ -275,6 +281,7 @@ easier to observe and recover when modeled as separate operations.
 - Give economic actions a durable idempotency key and reconciliation path
 
 ### Avoid
+
 - Using Magic Actions for ER-only state changes; `MagicIntentBundleBuilder.commit(...)` is sufficient
 - Omitting `#[action]` from the target instruction's accounts context
 - Reusing `is_writable` assumptions between the outer `#[commit]` context and the action account list;

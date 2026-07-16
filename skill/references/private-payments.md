@@ -127,8 +127,9 @@ Returns `{ "status": "ok" }`.
 ### POST /v1/transaction/send
 
 Submit a **signed** serialized transaction to the target returned by a builder endpoint. Send
-`transactionBase64`, `sendTo`, and the builder's `sendRpcEndpoint` when targeting an ER. Optional
-confirmation also requires the returned `recentBlockhash` and `lastValidBlockHeight`.
+`transactionBase64`, `sendTo`, and the builder's `sendRpcEndpoint` when targeting an ER. To request
+confirmation, send `confirm: true` together with the returned `recentBlockhash` and
+`lastValidBlockHeight`.
 
 The response includes `signature`, `confirmed`, `confirmationRpcEndpoint`, and
 `confirmationRequiresAuthToken`. If confirmation requires auth, pass the bearer token as a header;

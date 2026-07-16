@@ -126,10 +126,11 @@ tx.feePayer = erProvider.wallet.publicKey;
 tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
 tx = await erProvider.wallet.signTransaction(tx);
 
-// Some ER paths cannot be simulated faithfully. Use skipPreflight only for a
-// known incompatibility, then inspect the executed transaction logs.
-const txHash = await erProvider.sendAndConfirm(tx, [], { skipPreflight: true });
+const txHash = await erProvider.sendAndConfirm(tx, []);
 ```
+
+These examples preserve preflight. Set `skipPreflight: true` only when the exact ER path has a
+documented simulation incompatibility, then inspect the executed transaction logs.
 
 ## Undelegate Transaction (Ephemeral Rollup)
 
@@ -151,7 +152,7 @@ async function buildUndelegateTx(payer: PublicKey, pda: PublicKey): Promise<Tran
 }
 
 // Send to EPHEMERAL ROLLUP
-const txHash = await erProvider.sendAndConfirm(tx, [], { skipPreflight: true });
+const txHash = await erProvider.sendAndConfirm(tx, []);
 
 // Extract the base signature from the ER transaction/logs. This does not
 // confirm the base transaction.

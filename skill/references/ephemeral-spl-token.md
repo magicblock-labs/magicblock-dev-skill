@@ -196,8 +196,6 @@ const transferIxs = await transferSpl(fromOwner.publicKey, toOwner.publicKey, mi
 });
 await erProvider.sendAndConfirm(new Transaction().add(...transferIxs), [fromOwner], {
   commitment: "confirmed",
-  // Use only when this ER cannot simulate the transaction correctly.
-  skipPreflight: true,
 });
 
 // Balances on the ER live at the canonical ATA addresses:
@@ -231,8 +229,6 @@ for (const owner of owners) {
     [owner],
     {
       commitment: "confirmed",
-      // Use only when this ER cannot simulate the undelegation correctly.
-      skipPreflight: true,
     },
   );
   // This reads the ER transaction/logs and extracts the base signature; it
@@ -341,7 +337,7 @@ const tx = await program.methods
   .transaction();
 tx.recentBlockhash = (await erConnection.getLatestBlockhash()).blockhash;
 tx.sign(sender);
-const sgn = await erConnection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+const sgn = await erConnection.sendRawTransaction(tx.serialize());
 await erConnection.confirmTransaction(sgn, "confirmed");
 ```
 

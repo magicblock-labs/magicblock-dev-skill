@@ -77,39 +77,45 @@ allowance.
 
 ## Default stack
 
-1. **Programs: Anchor with `ephemeral-rollups-sdk`** (native and Pinocchio are also supported)
-   - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
-   - The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs
+### Programs
 
-   **Required macros:**
-   - `#[ephemeral]` on the program module, **before** `#[program]` — injects the `process_undelegation` callback (the delegation program CPIs into it to return the account) and the commit/undelegate intent builders. Commit and undelegation require it; delegation itself does not. Include it on any program that delegates so its accounts can later be undelegated.
-   - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
-   - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
-     callback macro authenticates fulfillment. Enable the `vrf` feature on `ephemeral-rollups-sdk`.
-     SDK v0.15.5 re-exports VRF, so new Anchor code does not need a direct
-     `ephemeral-vrf-sdk` dependency. See [vrf.md](references/vrf.md).
+Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported.
 
-   **Non-Anchor programs:** use the
-   `ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
-   engine examples repo ships Anchor and Pinocchio variants of `roll-dice`; use Pinocchio when
-   the target program is native rather than Anchor.
+- Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
+- The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs
+
+**Required macros:**
+
+- `#[ephemeral]` on the program module, **before** `#[program]` — injects the `process_undelegation` callback (the delegation program CPIs into it to return the account) and the commit/undelegate intent builders. Commit and undelegation require it; delegation itself does not. Include it on any program that delegates so its accounts can later be undelegated.
+- `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
+- `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
+  callback macro authenticates fulfillment. Enable the `vrf` feature on `ephemeral-rollups-sdk`.
+  SDK v0.15.5 re-exports VRF, so new Anchor code does not need a direct
+  `ephemeral-vrf-sdk` dependency. See [vrf.md](references/vrf.md).
+
+**Non-Anchor programs:** use the
+`ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
+engine examples repo ships Anchor and Pinocchio variants of `roll-dice`; use Pinocchio when
+the target program is native rather than Anchor.
 
 Versions in this skill are known-good snapshots or compatibility markers. Before changing dependencies,
 inspect the target repository's manifests, toolchain files, lockfiles, and relevant upstream sources.
 See [resources.md](references/resources.md) for the dated snapshot and source links.
 
-2. **Connections**
-   - Base layer connection for initialization and delegation:
-     `https://rpc.magicblock.app/devnet` or `https://rpc.magicblock.app/mainnet`
-   - Router connection for delegation status:
-     `https://devnet-router.magicblock.app/` or `https://router.magicblock.app/`
-   - Ephemeral rollup connection for operations on delegated accounts:
-     use the `fqdn` returned by router `getDelegationStatus`
+### Connections
 
-3. **Transaction routing**
-   - Delegate transactions → Base Layer
-   - Operations on delegated accounts → Ephemeral Rollup
-   - Undelegate/commit transactions → Ephemeral Rollup
+- Base layer connection for initialization and delegation:
+  `https://rpc.magicblock.app/devnet` or `https://rpc.magicblock.app/mainnet`
+- Router connection for delegation status:
+  `https://devnet-router.magicblock.app/` or `https://router.magicblock.app/`
+- Ephemeral rollup connection for operations on delegated accounts:
+  use the `fqdn` returned by router `getDelegationStatus`
+
+### Transaction routing
+
+- Delegate transactions → Base Layer
+- Operations on delegated accounts → Ephemeral Rollup
+- Undelegate/commit transactions → Ephemeral Rollup
 
 ## Operating procedure
 
@@ -238,6 +244,5 @@ Check:
 - verification gaps
 - fallback or impromptu behavior
 
-If improvements are needed, propose concrete skill edits with file paths, rationale, and evidence.
-
-Stop after the proposal. Do not edit this skill, run mutation commands, or apply fixes unless the user explicitly approves in a later instruction.
+If gaps are found, report them with evidence and request explicit approval for a separate maintenance
+task. Treat installed skill files as read-only during normal execution.

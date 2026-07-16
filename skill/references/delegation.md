@@ -370,12 +370,14 @@ authorization.
 ## Common errors
 
 ### Method Name Convention
+
 The delegate method is auto-generated as `delegate_<field_name>`:
 ```rust
 pub my_account: AccountInfo<'info>,  // => ctx.accounts.delegate_my_account()
 ```
 
 ### PDA Seeds Must Match
+
 Seeds in delegate instruction must exactly match account definition:
 ```rust
 #[account(mut, del, seeds = [b"tomo", uid.as_bytes()], bump)]
@@ -386,6 +388,7 @@ ctx.accounts.delegate_tomo(&payer, &[b"tomo", uid.as_bytes()], config)?;
 ```
 
 ### Account Owner Changes on Delegation
+
 ```
 Not delegated, base: account.owner == YOUR_PROGRAM_ID
 Delegated, base:     account.owner == DELEGATION_PROGRAM_ID
@@ -397,18 +400,21 @@ authorization: instructions executing on the ER must enforce the same signer, au
 account constraints they require on Solana.
 
 ### MagicIntentBundleBuilder takes owned `AccountInfo`
+
 The builder's `new` and `commit` / `commit_and_undelegate` methods take owned
 `AccountInfo` values, not references. Use `.to_account_info()` (Anchor) or
 `.clone()` (native Rust) on each account passed in. Anchor's `Account<>` and
 `Signer<>` types coerce via `.to_account_info()`.
 
 ### `FoldableIntentBuilder` must be in scope
+
 The chained `.commit(...)` / `.commit_and_undelegate(...)` methods are
 trait methods on `FoldableIntentBuilder`. The `#[ephemeral]` macro injects the
 trait import inside the annotated Anchor program module. Native Rust call sites
 must add `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;` explicitly.
 
 ### PER permissions are ephemeral
+
 Do not create or delegate a base-layer permission account. Delegate the data PDA,
 then create, update, and close its `EphemeralPermission` on the ER. Pre-fund the
 data PDA for permission rent before delegation.
@@ -416,18 +422,22 @@ data PDA for permission rent before delegation.
 ## Implementation checklist
 
 ### Required
+
 - Keep preflight enabled for supported base-layer transactions. Use
   `skipPreflight: true` only when the selected ER path has a known simulation
   incompatibility, and inspect the executed transaction logs afterward
 - Use dual connections - Base layer for delegate, ER for operations/undelegate
 - Verify delegation for routing/debugging - Query router status and compare the base and ER owners;
   do not use delegation itself as application authorization
-- Wait for state propagation - Add a 3 second sleep after delegate/undelegate in tests before proceeding to the next step
+- Wait for state propagation: poll router status plus base and ER ownership until they match the
+  expected delegated or undelegated state. Use a bounded timeout and fail the test explicitly if the
+  transition is not observed
 - Use `GetCommitmentSignature` to extract the base signature from ER logs, then
   confirm that returned signature separately on the base connection
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
 ### Avoid
+
 - Sending delegation transactions to the ER; delegation runs on base layer
 - Sending delegated-account operations to base layer; they run on the ER
 - Omitting `#[ephemeral]` from the program module
