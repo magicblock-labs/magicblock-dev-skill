@@ -69,9 +69,23 @@ that version line.
 | Node     | 24.10.0 |
 
 > Active MagicBlock engine examples use mixed Anchor versions: examples such as
-> root `counter/anchor` and `private-counter/anchor` use 1.0.2, while root
-> `gachapon-example` uses 0.32.1. Inspect the target example's `Cargo.toml` and
+> root `counter/anchor`, `private-counter/anchor`, and
+> `gachapon-example/programs/gachapon-example` use 1.0.2. Inspect the target example's `Cargo.toml` and
 > preserve its version line unless the task explicitly requests a migration.
+
+Example provenance verified at `magicblock-engine-examples` revision `1d11428` on **2026-07-16**:
+
+| Exact example path | Rust SDK | TypeScript SDK |
+|---|---:|---:|
+| `spl-tokens/anchor` | `0.14.3` | root `0.14.3`; app `0.15.3` |
+| `magic-actions/anchor` | `0.14.3` | `0.14.3` |
+| `binary-prediction/anchor` | `=0.14.3` | `0.14.3` |
+| `roll-dice/anchor` | `0.15.4` | app `0.14.3` |
+
+These are working-example snapshots, not one mutually compatible version recommendation. The registry
+latest was `0.16.0` on **2026-07-16**, while the code snippets in this skill intentionally use the
+separately verified `0.15.5` SDK snapshot. Preserve a target repo's version line unless upgrading it
+explicitly.
 
 ## Key Program IDs
 
@@ -84,6 +98,7 @@ that version line.
 | Permission Program (PER) | `ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1` |
 | VRF Program              | `Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz`  |
 | Ephemeral SPL Token      | `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`  |
+| Pricing Oracle           | `PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd`  |
 | Localnet Validator       | `mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev`  |
 
 Prefer the SDK constants over hardcoding these where available:
@@ -159,9 +174,18 @@ explicit migration.
 }
 ```
 
+Additional product/tool snapshots verified **2026-07-15**; re-check before installation:
+
+| Package | Snapshot | Context |
+|---|---:|---|
+| `@magicblock-labs/ephemeral-validator` | `0.13.7` | Local validator/stack binaries |
+| `@magicblock-labs/magicsvm` | `0.1.1` | Fast in-process testing when the target repo has a verified setup |
+| `@magicblock-labs/gum-sdk` | `^3.0.10` | Session Keys client in the current binary-prediction example |
+| Rust `session-keys` | `=3.1.1` | Session token validation in the current binary-prediction example |
+
 > The TypeScript `@coral-xyz/anchor` client stays on **0.32.1** even when the
 > on-chain program is built with Anchor 1.0.2 — the IDL/client are compatible,
-> so don't bump the npm anchor package to 1.x.
+> so do not bump the npm Anchor package to 1.x.
 
 ## Documentation Links
 
@@ -172,8 +196,15 @@ explicit migration.
 - [PER access-control guide — Ephemeral Permission lifecycle](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control#ephemeral-permission)
 - [Anchor private-counter example](https://github.com/magicblock-labs/magicblock-engine-examples/tree/main/private-counter/anchor)
 - [Ephemeral SPL Token](https://github.com/magicblock-labs/ephemeral-spl-token)
+- [Pricing Oracle](https://github.com/magicblock-labs/real-time-pricing-oracle)
+- [Pricing Oracle guide](https://docs.magicblock.gg/pages/tools/oracle/introduction)
+- [Session Keys guide](https://docs.magicblock.gg/pages/tools/session-keys/introduction)
+- [Ephemeral Accounts guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/introduction/ephemeral-accounts)
+- [Local development guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
 - [Ephemeral Rollups SDK v0.15.5 source](https://github.com/magicblock-labs/ephemeral-rollups-sdk/tree/v0.15.5)
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)
 - [Private Payments API Reference](https://payments.magicblock.app/reference)
+- [Private Payments live OpenAPI document](https://payments.magicblock.app/doc) — mutable hosted
+  contract; re-fetch before implementation rather than treating this skill's dated field tables as live

@@ -1,27 +1,45 @@
 # Magic Actions (Post-Commit Actions)
 
-Magic Actions are base-layer instructions that are scheduled inside an ER
-transaction and executed atomically once the commit is sealed back to the
-base layer. They let an ER-side instruction trigger arbitrary base-layer
+Magic Actions are base-layer instructions scheduled inside an ER transaction.
+Within each attempted base-layer transaction, the commit and actions execute
+atomically. If any BaseAction fails, however, the committor removes all BaseActions in that affected
+`TransactionStrategy` and retries its remaining commit strategy. That removal does not include actions
+in other transaction or finalize strategies. Magic Actions let an ER-side instruction trigger base-layer
 work — updating a leaderboard, distributing rewards, transferring SPL
 tokens — without a separate user transaction or external relayer.
 
+The ER submission, commit sealing, and visible base-layer side-effect are different observation points.
+Do not report the action complete from the ER signature alone.
+
+## Contents
+
+- [When to use](#when-to-use)
+- [Action handler instruction](#action-handler-instruction-target-of-the-call)
+- [Schedule a commit and action](#schedule-a-commit--action-from-the-er)
+- [Multiple actions](#multiple-actions)
+- [Commit-and-undelegate](#commit-and-undelegate-with-actions)
+- [PDA-signed actions](#pda-signed-actions-escrow-authority)
+- [Field reference](#callhandler-field-reference)
+- [Common errors](#common-errors)
+- [Failure, observation, and recovery](#failure-observation-and-recovery)
+- [Implementation checklist](#implementation-checklist)
+
 ## When to use
 
-- After committing ER state, run a follow-up base-layer instruction in the
-  same atomic unit (e.g., update a global leaderboard once a player's score
-  is committed).
-- Atomically commit + undelegate + execute side-effects in one ER transaction.
+- After committing ER state, request a follow-up base-layer instruction (e.g., update a global
+  leaderboard once a player's score is committed), then observe whether it actually ran.
+- Attempt commit + undelegate + side-effects in one base-layer transaction, with recovery if an action
+  failure causes every BaseAction in that transaction strategy to be removed before commit retry.
 - PDA-driven flows where a delegated account needs to dispatch base-layer
   side-effects without a user signature.
 
-If you just want to commit state, use `MagicIntentBundleBuilder.commit(...)`
-without any actions — see [delegation.md](delegation.md). Magic Actions are
-specifically for *follow-up base-layer instructions chained to a commit*.
+To commit state without a base-layer follow-up, use `MagicIntentBundleBuilder.commit(...)` without
+actions. See [delegation.md](delegation.md).
 
 ## Imports
 
 ```rust
+use ephemeral_rollups_sdk::anchor::action;
 use ephemeral_rollups_sdk::ephem::{CallHandler, MagicIntentBundleBuilder};
 use ephemeral_rollups_sdk::{ActionArgs, ShortAccountMeta};
 ```
@@ -30,7 +48,9 @@ use ephemeral_rollups_sdk::{ActionArgs, ShortAccountMeta};
 
 Mark the base-layer instruction that the action will invoke with the
 `#[action]` attribute on its accounts context. This declares the instruction
-as callable from a post-commit action.
+as callable from a post-commit action. The macro injects `escrow_auth` and
+`escrow` accounts into this target context; do not add them to the
+`ShortAccountMeta` list manually.
 
 ```rust
 pub fn update_leaderboard(ctx: Context<UpdateLeaderboard>) -> Result<()> {
@@ -70,11 +90,11 @@ pub fn commit_and_update_leaderboard(
     let action_args = ActionArgs::new(instruction_data);
     let action_accounts = vec![
         ShortAccountMeta {
-            pubkey: ctx.accounts.leaderboard.key(),
+            pubkey: ctx.accounts.leaderboard.key().to_bytes().into(),
             is_writable: true,
         },
         ShortAccountMeta {
-            pubkey: ctx.accounts.counter.key(),
+            pubkey: ctx.accounts.counter.key().to_bytes().into(),
             is_writable: false,
         },
     ];
@@ -110,8 +130,15 @@ pub struct CommitAndUpdateLeaderboard<'info> {
     /// CHECK: Leaderboard PDA — writable flag is set inside the action accounts list.
     #[account(seeds = [LEADERBOARD_SEED], bump)]
     pub leaderboard: UncheckedAccount<'info>,
+
+    /// CHECK: Destination program for the scheduled base-layer action.
+    #[account(address = crate::ID)]
+    pub program_id: UncheckedAccount<'info>,
 }
 ```
+
+The destination program must be present in the outer commit context so the ER transaction can supply
+it while scheduling the action, even though it is not one of the target instruction's data accounts.
 
 ## Multiple Actions
 
@@ -134,8 +161,9 @@ MagicIntentBundleBuilder::new(
 
 ## Commit-and-Undelegate with Actions
 
-Actions can be chained onto undelegation as well. The counter commits,
-undelegates, and the actions run — all atomically in one ER transaction.
+Actions can be chained onto undelegation as well. Each base-layer attempt applies the counter commit,
+undelegation, and actions atomically, but one action failure can cause all BaseActions in the affected
+transaction strategy to be removed before the committor retries its remaining commit strategy.
 
 ```rust
 MagicIntentBundleBuilder::new(
@@ -182,44 +210,80 @@ MagicIntentBundleBuilder::new(
 | `escrow_authority` | `AccountInfo` | Signer that pays transaction fees for the action from an escrow PDA. Use the user's wallet for user-paid flows; use a PDA + `build_and_invoke_signed` for program-paid flows. |
 | `compute_units` | `u32` | Base-layer compute budget for this action. `200_000` is a reasonable default; increase for heavy actions. |
 
-## Common Gotchas
+## Common errors
 
 ### `#[action]` is required on the target instruction's accounts context
-Without `#[action]`, the SDK can't dispatch into the instruction from a
-post-commit action. This is the most common cause of "action target not
-callable" errors.
+
+Without `#[action]`, the SDK cannot dispatch into the instruction from a post-commit action.
 
 ### `is_writable` must match the action's actual writes
+
 `ShortAccountMeta { is_writable: true }` for any account the action mutates,
 even if the same account also appears in the outer `#[commit]` context with a
 different mutability. The two contexts are independent — the action accounts
 list is what the base-layer transaction sees.
 
 ### Use `[action]` (slice/array) not `vec![action]`
+
 `add_post_commit_actions` takes `IntoIterator<Item = CallHandler>`. Array
 literals are the cleaner form: `.add_post_commit_actions([action])`.
 
 ### PDA escrow authority needs `build_and_invoke_signed`
+
 If `escrow_authority` is a PDA, the outer call must provide PDA seeds via
 `build_and_invoke_signed(payer_seeds)`. Calling `build_and_invoke()` (without
 `_signed`) will fail signature verification at action execution time.
 
 ### Compute units are per-action, not per-bundle
+
 Each action gets its own compute budget. If you chain three actions at
-200,000 CU each, you're declaring 600,000 total. Increase if any individual
+200,000 CU each, the declared total is 600,000. Increase the budget if any individual
 action does heavy work.
 
-## Best Practices
+## Failure, Observation, and Recovery
 
-### Do's
-- Use Magic Actions for atomic ER-commit + base-layer follow-ups
+Magic Actions express a commit-plus-action intent. In any one base-layer attempt, the actions run after
+the commit and an action failure reverts that transaction. The committor may then remove every
+BaseAction in the affected `TransactionStrategy` and retry that strategy's remaining commit work.
+Other transaction/finalize strategies are separate. A successful ER scheduling transaction—or a later
+successful commit—is not proof that any originally scheduled action ran.
+
+- Define success as the committed account state plus every required base-layer action effect, and model
+  commit-without-actions as a distinct recovery state.
+- Record/correlate the ER signature, commitment signature or base transaction, committed accounts, and
+  action target.
+- Make the target instruction idempotent or guarded by a durable operation ID. A recovery attempt must
+  not distribute a reward or apply a settlement twice.
+- Validate insufficient escrow funding, wrong account metas, missing signer seeds, compute exhaustion,
+  target-program error, and one failing action in a multi-action bundle.
+- Do not implement an independent client retry that executes only the base action unless the product has
+  a reconciliation protocol proving whether the original bundle applied.
+- Expose “settling” separately from “settled” in user-facing state, with timeout/alerting and a manual
+  reconciliation owner.
+- Reconcile every originally scheduled action, including actions whose attempted execution was reverted
+  and then removed only because another BaseAction in the same transaction strategy failed.
+- Verify both per-attempt rollback and whole-strategy BaseAction removal in the target environment
+  whenever an action affects money or irreversible entitlements.
+
+Keep multiple actions only when they share one intended business outcome. Independent side-effects are
+easier to observe and recover when modeled as separate operations.
+
+## Implementation checklist
+
+### Required
+
+- Use Magic Actions for commit-linked base-layer follow-ups whose delivery is observed and reconciled
 - Keep `escrow_authority` consistent — user wallet for user-paid, PDA for program-paid
 - Pair `add_post_commit_actions` with `commit_and_undelegate` when the
   follow-up should run as part of the release path
 - Set realistic `compute_units` — match the action's actual work
+- Observe the base-layer effect before marking the product operation settled
+- Give economic actions a durable idempotency key and reconciliation path
 
-### Don'ts
-- Don't use Magic Actions for ER-only state changes — `MagicIntentBundleBuilder.commit(...)` alone is sufficient
-- Don't forget `#[action]` on the target instruction's accounts context
-- Don't mix up `is_writable` between the outer `#[commit]` context and the action's accounts list — they serve different transactions
-- Don't call `build_and_invoke()` when the escrow authority is a PDA
+### Avoid
+
+- Using Magic Actions for ER-only state changes; `MagicIntentBundleBuilder.commit(...)` is sufficient
+- Omitting `#[action]` from the target instruction's accounts context
+- Reusing `is_writable` assumptions between the outer `#[commit]` context and the action account list;
+  they describe different transactions
+- Calling `build_and_invoke()` when the escrow authority is a PDA

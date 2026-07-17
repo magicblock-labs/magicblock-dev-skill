@@ -4,7 +4,7 @@
 # Installs the skill into Claude Code, Codex, Cursor, Windsurf, Cline, Continue,
 # or as an AGENTS.md file at the project root.
 #
-# Usage: ./install.sh [TARGET FLAGS] [--project] [--path <path>]
+# Usage: ./install.sh [TARGET FLAGS] [--project] [--full] [--path <path>]
 
 set -euo pipefail
 
@@ -25,6 +25,7 @@ INSTALL_AGENTS_MD=false
 PROJECT_INSTALL=false
 CUSTOM_PATH=""
 TARGET_SELECTED=false
+FULL_CONTEXT=false
 
 print_help() {
     cat <<EOF
@@ -50,6 +51,8 @@ Combined:
 Modifiers:
   --project      For --claude/--codex, install to .claude/.codex inside the
                  current project instead of the global location
+  --full         For single-file targets, preload every product reference.
+                 Default single-file installs keep deep guides on demand
   --path PATH    Install the raw skill/ folder to a custom path
   -h, --help     Show this help message
 
@@ -62,9 +65,18 @@ Notes:
 EOF
 }
 
-# Ensure dist/ artifacts exist; build if missing
+# Ensure dist/ artifacts exist and match the current source fingerprint.
 ensure_built() {
-    if [ ! -f "$DIST_DIR/AGENTS.md" ] || [ ! -f "$DIST_DIR/$SKILL_NAME.cursor.mdc" ]; then
+    local current_fingerprint built_fingerprint=""
+    current_fingerprint="$(bash "$SCRIPT_DIR/build.sh" --source-fingerprint)"
+    if [ -f "$DIST_DIR/.source-fingerprint" ]; then
+        built_fingerprint="$(tr -d '[:space:]' < "$DIST_DIR/.source-fingerprint")"
+    fi
+
+    if [ ! -f "$DIST_DIR/AGENTS.md" ] || [ ! -f "$DIST_DIR/AGENTS.full.md" ] || \
+       [ ! -f "$DIST_DIR/$SKILL_NAME.cursor.mdc" ] || \
+       [ ! -f "$DIST_DIR/$SKILL_NAME.full.cursor.mdc" ] || \
+       [ "$built_fingerprint" != "$current_fingerprint" ]; then
         echo "Building dist/ artifacts..."
         bash "$SCRIPT_DIR/build.sh" >/dev/null
     fi
@@ -148,6 +160,8 @@ while [[ $# -gt 0 ]]; do
             shift ;;
         --project)
             PROJECT_INSTALL=true; shift ;;
+        --full)
+            FULL_CONTEXT=true; shift ;;
         --path)
             if [[ $# -lt 2 ]]; then
                 echo "Error: --path requires a value"
@@ -176,6 +190,11 @@ fi
 # --path is exclusive
 if [[ -n "$CUSTOM_PATH" ]] && [[ "$TARGET_SELECTED" == true || "$PROJECT_INSTALL" == true ]]; then
     echo "Error: --path cannot be combined with other target flags"
+    exit 1
+fi
+
+if [[ -n "$CUSTOM_PATH" ]] && [[ "$FULL_CONTEXT" == true ]]; then
+    echo "Error: --full applies only to single-file targets and cannot be combined with --path"
     exit 1
 fi
 
@@ -212,6 +231,13 @@ CLINE_PATH=".clinerules/$SKILL_NAME.md"
 CONTINUE_PATH=".continue/rules/$SKILL_NAME.md"
 AGENTS_MD_PATH="AGENTS.md"
 
+AGENTS_SOURCE="$DIST_DIR/AGENTS.md"
+CURSOR_SOURCE="$DIST_DIR/$SKILL_NAME.cursor.mdc"
+if [[ "$FULL_CONTEXT" == true ]]; then
+    AGENTS_SOURCE="$DIST_DIR/AGENTS.full.md"
+    CURSOR_SOURCE="$DIST_DIR/$SKILL_NAME.full.cursor.mdc"
+fi
+
 # Build dist/ if any single-file targets are selected
 if [[ "$INSTALL_CURSOR" == true || "$INSTALL_WINDSURF" == true || \
       "$INSTALL_CLINE" == true || "$INSTALL_CONTINUE" == true || \
@@ -246,35 +272,35 @@ if [[ "$INSTALL_CODEX" == true ]]; then
 fi
 
 if [[ "$INSTALL_CURSOR" == true ]]; then
-    if install_file_to_path "$DIST_DIR/$SKILL_NAME.cursor.mdc" "$CURSOR_PATH" "Cursor rule"; then
+    if install_file_to_path "$CURSOR_SOURCE" "$CURSOR_PATH" "Cursor rule"; then
         INSTALLED_TARGETS+=("Cursor:$CURSOR_PATH")
         CURSOR_INSTALLED=true
     fi
 fi
 
 if [[ "$INSTALL_WINDSURF" == true ]]; then
-    if install_file_to_path "$DIST_DIR/AGENTS.md" "$WINDSURF_PATH" "Windsurf rule"; then
+    if install_file_to_path "$AGENTS_SOURCE" "$WINDSURF_PATH" "Windsurf rule"; then
         INSTALLED_TARGETS+=("Windsurf:$WINDSURF_PATH")
         WINDSURF_INSTALLED=true
     fi
 fi
 
 if [[ "$INSTALL_CLINE" == true ]]; then
-    if install_file_to_path "$DIST_DIR/AGENTS.md" "$CLINE_PATH" "Cline rule"; then
+    if install_file_to_path "$AGENTS_SOURCE" "$CLINE_PATH" "Cline rule"; then
         INSTALLED_TARGETS+=("Cline:$CLINE_PATH")
         CLINE_INSTALLED=true
     fi
 fi
 
 if [[ "$INSTALL_CONTINUE" == true ]]; then
-    if install_file_to_path "$DIST_DIR/AGENTS.md" "$CONTINUE_PATH" "Continue rule"; then
+    if install_file_to_path "$AGENTS_SOURCE" "$CONTINUE_PATH" "Continue rule"; then
         INSTALLED_TARGETS+=("Continue:$CONTINUE_PATH")
         CONTINUE_INSTALLED=true
     fi
 fi
 
 if [[ "$INSTALL_AGENTS_MD" == true ]]; then
-    if install_file_to_path "$DIST_DIR/AGENTS.md" "$AGENTS_MD_PATH" "AGENTS.md"; then
+    if install_file_to_path "$AGENTS_SOURCE" "$AGENTS_MD_PATH" "AGENTS.md"; then
         INSTALLED_TARGETS+=("AGENTS.md:$AGENTS_MD_PATH")
         AGENTS_MD_INSTALLED=true
     fi

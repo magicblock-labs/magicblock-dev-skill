@@ -41,7 +41,7 @@ when the workload is infrequent, latency-insensitive, or mostly immutable reads.
 the application needs repeated low-latency writes, burst throughput, private execution, or a fast
 interaction loop followed by periodic base-layer settlement.
 
-State the non-goals. A useful design explains what remains on base layer and why.
+Record non-goals and explain what remains on base layer.
 
 ### 3. Select products and supporting features
 
@@ -53,16 +53,21 @@ and why nearby alternatives were rejected.
 | Public, repeated low-latency state changes | Ephemeral Rollup | Plan delegation, routing, commits, and eventual undelegation |
 | Permissioned access to delegated state | Private Ephemeral Rollup (PER) | Pre-fund and delegate the protected account, then create and manage its ephemeral permission on the ER |
 | Managed private deposits, transfers, withdrawals, or swaps | Private Payments API | Do not model it as a custom-program ER flow unless the API boundary requires one |
-| SPL balances used by a custom program on the ER | Ephemeral SPL Token | Model the base vault, delegated token account, idempotent mode, and withdrawal lifecycle |
+| SPL balances used by a custom program on the ER | Ephemeral SPL Token | Model the base vault, delegated token account, and chosen shuttle or explicit legacy withdrawal path |
 | Temporary state that must exist only on the ER | Ephemeral Accounts | Model the sponsor, ER-only creation, resize/close lifecycle, and intentional lack of base settlement |
 | Temporary delegated signing authority | Session keys | Define scope, expiry, revocation, and the onchain authorization check |
+| Low-latency external market data | Pricing Oracle | Verify source/feed identity, publish-time freshness, numeric conversion, user limits, and runtime co-location |
 | Verifiable randomness | VRF | Model request, callback, oracle dependency, and callback failure |
 | Repeated scheduled execution | Cranks | Model interval, iteration limits, cancellation, failure, and commit cost |
-| Base-layer effect tied to an ER commit | Magic Actions | Define the post-commit instruction and atomicity expectation |
-| More than the default sponsored commit allowance | Fee vault sponsorship | Model the fee vault, delegated fee payer, funding, and lamports top-up path |
+| Base-layer effect tied to an ER commit | Magic Actions | Define the post-commit instruction, committor retry behavior, observation, and reconciliation |
+| More than the default sponsored commit allowance | Fee vault sponsorship | Model the delegated payer that is debited, validator fee vault that is credited, funding, and top-up path |
 
 Do not conflate PER with Private Payments. PER protects access to delegated program state; Private
 Payments exposes a managed private-balance and transfer API.
+
+For multi-product designs, use [composition-patterns.md](composition-patterns.md). Load the specific
+product references only after selecting the product set; this keeps planning focused while preserving
+the security and settlement boundaries between products.
 
 ### 4. Model accounts, authorities, and delegation groups
 
@@ -117,8 +122,8 @@ Specify:
 - commit trigger: per operation, periodic, checkpoint, or terminal
 - maximum acceptable uncommitted duration and data loss window
 - terminal undelegation owner and trigger
-- post-commit effects and their atomicity requirements
-- commit quota, fee vault, delegated fee payer, and top-up behavior
+- post-commit effects, action-stripping retry risk, observation, and reconciliation requirements
+- commit quota, delegated payer debit, validator fee-vault credit, and payer top-up behavior
 - timeout, retry, idempotency, cancellation, and refund paths
 - monitoring for base ownership, router status, ER ownership, commit progress, and service health
 - manual recovery path and the actor authorized to use it
@@ -178,6 +183,9 @@ Verify current package versions and commands before recommending an environment.
 MagicSVM as a default merely because it is fast; require a runnable project example or verified
 upstream surface. Check that the installed `@magicblock-labs/ephemeral-validator` version actually
 exposes `mb-stack` before using it in a gate.
+
+See [local-development.md](local-development.md) for the environment-by-claim workflow and repeatable
+cross-runtime test sequence.
 
 ## Architecture brief template
 

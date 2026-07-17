@@ -1,10 +1,30 @@
 # Private Payments API
 
-The MagicBlock Private Payments API builds unsigned SPL token transactions for deposits, transfers, withdrawals, swaps, and mint initialization across Solana (base chain) and MagicBlock ephemeral rollups. It also exposes balance queries and a wallet challenge/login flow that issues bearer tokens for reading private data.
+The MagicBlock Private Payments API builds unsigned SPL token transactions for deposits, transfers,
+withdrawals, swaps, and mint initialization across Solana and MagicBlock ERs. It also provides balance
+queries and wallet challenge/login authentication for private reads and protected Private-ER routes.
 
-The API is stateless: it only builds transactions, never signs or submits them. The caller deserializes the response, signs client-side, then submits to the chain indicated by `sendTo`.
+The transaction-builder endpoints never sign as the user's wallet. They return a serialized transaction
+for the caller to sign; gasless flows may already contain the configured sponsor's signature. After the
+required user signatures are added, the client may submit directly to the declared RPC or use the API's
+`POST /v1/transaction/send` endpoint.
 
 **Base URL (mainnet):** `https://payments.magicblock.app`
+
+**Hosted contract snapshot:** endpoint fields, routes, defaults, auth behavior, and fees below were
+verified against the live `/doc` OpenAPI document on **2026-07-16**. This service is mutable. Re-fetch
+`https://payments.magicblock.app/doc` before implementation and treat any field with no declared schema
+default—such as `exactOut` in this snapshot—as unspecified rather than inferred.
+
+## Contents
+
+- [Authentication](#authentication)
+- [Typical workflow](#typical-workflow)
+- [Response and submission contract](#common-response-format)
+- [SPL endpoints](#endpoints)
+- [Swap endpoints](#get-v1swapquote)
+- [Queued settlement and confirmation](#queued-settlement-and-confirmation)
+- [MCP endpoint](#mcp-endpoint)
 
 ## Authentication
 
@@ -15,7 +35,10 @@ Endpoints that read private data inside the Private Ephemeral Rollup require a b
 3. `POST /v1/spl/login` with `{ pubkey, challenge, signature }` — returns a `token`
 4. Pass `Authorization: Bearer <token>` on:
    - `GET /v1/spl/private-balance` (**required**)
+   - `POST /v1/spl/stealth-pool` (**required**)
    - `POST /v1/spl/transfer` (**optional** — only when the request needs to connect to the Private Ephemeral Rollup)
+   - `POST /v1/spl/undelegate-ephemeral-ata` (**optional** — route-dependent when the request uses the Private Ephemeral Rollup)
+   - `POST /v1/transaction/send` (**optional** — required when submitting/confirming through an authenticated private ER)
 
 Tokens are scoped to the wallet that signed the challenge.
 
@@ -28,28 +51,35 @@ Tokens are scoped to the wallet that signed the challenge.
 4. POST /v1/spl/login                Exchange signed challenge for bearer token
 5. POST /v1/spl/deposit              Deposit to ER → sign → send to "base"
 6. GET  /v1/spl/private-balance      Check ER balance (auth required)
-7. POST /v1/spl/transfer             Public or private transfer
-8. GET  /v1/swap/quote               Quote a swap between two mints
-9. POST /v1/swap/swap                Build swap (public or private)
-10. POST /v1/spl/withdraw            Withdraw from ER → sign → send to "base"
-11. GET  /v1/spl/balance             Check base balance
+7. POST /v1/spl/stealth-pool         Initialize a stealth handle (auth required)
+8. POST /v1/spl/transfer             Public or private transfer (auth when Private ER is used)
+9. POST /v1/spl/undelegate-ephemeral-ata  Build eATA undelegation (auth when Private ER is used)
+10. GET  /v1/swap/quote              Quote a swap between two mints
+11. POST /v1/swap/swap               Build swap (public or private)
+12. POST /v1/spl/withdraw            Build withdrawal → sign
+13. POST /v1/transaction/send        Submit a signed builder response to its declared RPC
+14. GET  /v1/spl/balance             Check base balance
 ```
 
 ## Common Response Format
 
-All transaction-building endpoints (`deposit`, `transfer`, `withdraw`, `initialize-mint`) return:
+SPL transaction-building endpoints (`deposit`, `transfer`, `withdraw`, `initialize-mint`, eATA
+undelegation, and stealth-pool setup) use this common response shape:
 
 ```json
 {
-  "kind": "deposit" | "withdraw" | "transfer" | "initializeMint",
+  "kind": "deposit" | "withdraw" | "transfer" | "initializeMint" | "undelegateEphemeralAta" | "stealthPool",
   "version": "legacy" | "v0",
   "transactionBase64": "<base64-encoded unsigned transaction>",
   "sendTo": "base" | "ephemeral",
+  "sendRpcEndpoint": "<exact ER RPC when sendTo is ephemeral>",
+  "from": "base" | "ephemeral",
   "recentBlockhash": "<blockhash>",
   "lastValidBlockHeight": 284512337,
   "instructionCount": 3,
   "requiredSigners": ["<pubkey>"],
-  "validator": "<pubkey>"
+  "validator": "<pubkey>",
+  "fees": { "lamports": "0", "tokens": "0" }
 }
 ```
 
@@ -58,7 +88,11 @@ Private `base → base` transfers may return `version: "v0"` when a useful looku
 The client must:
 1. Deserialize `transactionBase64`
 2. Sign with each key in `requiredSigners`
-3. Send to the chain indicated by `sendTo` (`"base"` = Solana, `"ephemeral"` = ER RPC)
+3. Send to the chain indicated by `sendTo`. When `sendRpcEndpoint` is present, use that exact ER RPC.
+   Either submit directly or call `POST /v1/transaction/send` with the signed transaction.
+
+`from` and `fees` are transfer-specific. Fee strings are in lamports or token base units and return
+`"0"` when not charged. Do not calculate user totals from `amount` alone when fees are present.
 
 The `/v1/swap/swap` endpoint has its own response shape (see Swap section).
 
@@ -90,6 +124,19 @@ Returns `{ "status": "ok" }`.
 
 ---
 
+### POST /v1/transaction/send
+
+Submit a **signed** serialized transaction to the target returned by a builder endpoint. Send
+`transactionBase64`, `sendTo`, and the builder's `sendRpcEndpoint` when targeting an ER. To request
+confirmation, send `confirm: true` together with the returned `recentBlockhash` and
+`lastValidBlockHeight`.
+
+The response includes `signature`, `confirmed`, `confirmationRpcEndpoint`, and
+`confirmationRequiresAuthToken`. If confirmation requires auth, pass the bearer token as a header;
+never log or persist a tokenized RPC URL.
+
+---
+
 ### GET /v1/spl/challenge
 
 Generate a challenge string for a wallet to sign as part of the login flow.
@@ -100,7 +147,6 @@ Generate a challenge string for a wallet to sign as part of the login flow.
 |---|---|---|---|
 | pubkey | string (pubkey) | Yes | Wallet that will read private data |
 | cluster | string | No | `"mainnet"`, `"devnet"`, or custom RPC URL |
-| mock | boolean | No | Use a mock challenge for testing. Defaults to `false` |
 
 ```json
 { "challenge": "1234567890" }
@@ -118,7 +164,6 @@ Exchange a wallet-signed challenge for a bearer token.
 | challenge | string | Yes | Challenge string returned by `/v1/spl/challenge` |
 | signature | string | Yes | Wallet signature over the challenge |
 | cluster | string | No | Cluster selection |
-| mock | boolean | No | Use mock login for testing |
 
 ```json
 { "token": "1234567890" }
@@ -173,10 +218,11 @@ Deposit SPL tokens from Solana into an ephemeral rollup.
 | cluster | string | No | `"mainnet"`, `"devnet"`, or custom RPC URL. Defaults to mainnet |
 | mint | string (pubkey) | No | Defaults to USDC (mainnet: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, devnet: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`) |
 | validator | string (pubkey) | No | Defaults to ephemeral RPC identity via `getIdentity` |
-| initIfMissing | boolean | No | Auto-initialize transfer queue if missing |
+| initIfMissing | boolean | No | Initialize the owner's eATA when missing |
 | initVaultIfMissing | boolean | No | Auto-initialize vault if missing |
 | initAtasIfMissing | boolean | No | Auto-initialize ATAs if missing |
-| idempotent | boolean | No | Use idempotent variants for any preparatory init instructions |
+| idempotent | boolean | No | Per-request selector for the default shuttle deposit builder (`true`) or legacy deposit builder (`false`) |
+| private | boolean | No | Defaults to `true`; add the private eATA permission instruction when enabled |
 
 ```json
 {
@@ -185,7 +231,8 @@ Deposit SPL tokens from Solana into an ephemeral rollup.
   "initIfMissing": true,
   "initVaultIfMissing": true,
   "initAtasIfMissing": true,
-  "idempotent": true
+  "idempotent": true,
+  "private": true
 }
 ```
 
@@ -200,22 +247,25 @@ Transfer SPL tokens publicly or privately through an ephemeral rollup.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | from | string (pubkey) | Yes | Sender address |
-| to | string (pubkey) | Yes | Recipient address |
+| to | string (pubkey or initialized stealth handle) | Yes | Recipient owner or exact stealth handle |
 | mint | string (pubkey) | Yes | SPL mint address |
-| amount | integer (>=1) | Yes | Base-unit amount |
-| visibility | `"public"` \| `"private"` | Yes | Transfer visibility |
-| fromBalance | `"base"` \| `"ephemeral"` | Yes | Source balance location |
-| toBalance | `"base"` \| `"ephemeral"` | Yes | Destination balance location |
+| amount | integer (>=0) | Yes | Base-unit amount. Zero is reserved for supported private base→ephemeral setup flows; ordinary value transfers should be positive |
+| visibility | `"public"` \| `"private"` | No | Defaults to `"private"` |
+| fromBalance | `"base"` \| `"ephemeral"` | No | Source balance location; set it explicitly |
+| toBalance | `"base"` \| `"ephemeral"` | No | Destination balance location; set it explicitly |
 | cluster | string | No | Cluster selection |
 | validator | string (pubkey) | No | Validator override |
-| initIfMissing | boolean | No | Auto-initialize transfer queue |
+| initIfMissing | boolean | No | Initialize the relevant eATA when missing |
 | initAtasIfMissing | boolean | No | Auto-initialize ATAs |
-| initVaultIfMissing | boolean | No | Auto-initialize vault. Defaults to `false` |
+| initVaultIfMissing | boolean | No | Auto-initialize vault when requested |
 | memo | string | No | Appends a Memo Program instruction with this UTF-8 message |
 | minDelayMs | string (numeric) | No | Private only. Min delay in ms. Defaults to `"0"` |
 | maxDelayMs | string (numeric) | No | Private only. Max delay. Defaults to `"0"` or `minDelayMs` |
 | clientRefId | string (numeric) | No | Private only. Encrypted client reference ID for confirming a payment |
 | split | integer (1-15) | No | Private only. Split into N sub-transfers. Defaults to 1. Cannot exceed `amount` |
+| exactOut | boolean | No | Private fee policy: `true` deducts fees from sender; `false` deducts them from recipient amount. The live schema declares no default |
+| platformFeeBps | integer (0-10000) | No | Token-denominated platform fee supported only for base-source transfers |
+| platformFeeAccount | string (token account pubkey) | When fee > 0 | Initialized token account for the transferred mint |
 | gasless | boolean | No | When `true`, the API uses the configured sponsor as fee payer and prepends a relay-fee token transfer to the sponsor ATA |
 | legacy | boolean | No | Force a legacy transaction (skip lookup-table compilation). Defaults to `false` |
 
@@ -240,6 +290,26 @@ Transfer SPL tokens publicly or privately through an ephemeral rollup.
 }
 ```
 
+Supported routes in the current SDK-backed API are public base→base, public
+ephemeral→ephemeral, and private base→base, base→ephemeral, ephemeral→ephemeral, or
+ephemeral→base. Other combinations return `UNSUPPORTED_TRANSFER_ROUTE`.
+
+The live request schema accepts `amount: 0` for specific private base→ephemeral setup/delegation flows;
+do not generalize zero as a meaningful payment amount for other routes. With `exactOut: true`, the
+recipient receives `amount` and the sender pays the platform fee in addition; with `false`, the fee is
+deducted from the recipient amount. Gasless mode requires a configured sponsor,
+an approved stablecoin mint (mainnet USDC/USDT or devnet USDC), and a transfer of at least 0.5
+USDC/USDT. It charges a 0.2 USDC/USDT relay fee. If `from` is an
+off-curve PDA owner, gasless mode is ignored because the supported flow requires a wallet sender.
+
+For a stealth handle destination, first initialize it through `POST /v1/spl/stealth-pool`. Handle bytes
+are exact and case-sensitive; the service does not trim, lowercase, or normalize them. A handle may map
+to one to ten destination owners, with optional split distribution. Handle transfers are private
+base→base flows: set `visibility`, `fromBalance`, and `toBalance` explicitly rather than relying on
+undeclared balance-location defaults. Stealth-pool initialization requires bearer authorization. Treat
+pool authority, rotation, ER update completion, and user-visible canonicalization as product security
+decisions.
+
 ---
 
 ### POST /v1/spl/withdraw
@@ -253,10 +323,10 @@ Withdraw SPL tokens from an ephemeral rollup back to Solana.
 | amount | integer (>=1) | Yes | Base-unit amount |
 | cluster | string | No | Cluster selection |
 | validator | string (pubkey) | No | Validator override |
-| initIfMissing | boolean | No | Auto-initialize transfer queue |
+| initIfMissing | boolean | No | Initialize the owner's eATA when missing |
 | initAtasIfMissing | boolean | No | Auto-initialize ATAs |
 | escrowIndex | integer (>=0) | No | Escrow index |
-| idempotent | boolean | No | Use idempotent variants for any preparatory init instructions |
+| idempotent | boolean | No | Per-request selector for the default shuttle withdrawal builder (`true`) or legacy direct withdrawal builder (`false`) |
 
 ```json
 {
@@ -332,7 +402,9 @@ Get a swap quote between two SPL mints. Proxies the configured Triton Metis Swap
 | forJitoBundle | boolean | No | Exclude routes incompatible with Jito bundles |
 | supportDynamicIntermediateTokens | boolean | No | Allow dynamic intermediate selection |
 
-Response is a Jupiter-style quote with `inputMint`, `inAmount`, `outputMint`, `outAmount`, `otherAmountThreshold`, `swapMode`, `slippageBps`, `priceImpactPct`, `routePlan`, etc. Pass it verbatim as `quoteResponse` to `/v1/swap/swap`.
+The response is a Jupiter-style quote containing fields such as `inputMint`, `inAmount`, `outputMint`,
+`outAmount`, `otherAmountThreshold`, `swapMode`, `slippageBps`, `priceImpactPct`, and `routePlan`. Pass
+the complete response as `quoteResponse` to `/v1/swap/swap`.
 
 ---
 
@@ -342,8 +414,11 @@ Build an unsigned swap transaction from a quote.
 
 **Visibility modes:**
 
-- **`visibility: "public"`** (default) — pure pass-through to Jupiter/Metis. Returns whatever the upstream produces.
-- **`visibility: "private"`** — the server forces Jupiter's output into a program-owned stash ATA (deterministically derived from `(userPublicKey, quoteResponse.outputMint)`), prepends an idempotent ATA-create, and appends a `schedule_private_transfer` instruction that registers a one-shot Hydra crank. When the crank fires, it self-CPIs into the on-chain private-transfer flow to deliver the swapped tokens to `destination` with the requested delay/split policy.
+- **`visibility: "public"`** (default) — passes the request and response through Jupiter/Metis.
+- **`visibility: "private"`** — routes Jupiter's output to a program-owned stash ATA derived from
+  `(userPublicKey, quoteResponse.outputMint)`, prepends an idempotent ATA creation, and appends a
+  `schedule_private_transfer` instruction for a one-shot Hydra crank. The crank invokes the on-chain
+  private-transfer flow to deliver the tokens to `destination` under the requested delay/split policy.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -365,6 +440,12 @@ Build an unsigned swap transaction from a quote.
 | dynamicComputeUnitLimit | boolean | No | Auto compute unit limit |
 | computeUnitPriceMicroLamports | integer | No | Exact compute unit price |
 | prioritizationFeeLamports | integer \| object | No | Priority fee config |
+| nativeDestinationAccount | string (pubkey) | No | Native SOL output account for supported public swaps; rejected for private swaps |
+| trackingAccount | string (pubkey) | No | Public key used for downstream tracking |
+| skipUserAccountsRpcCalls | boolean | No | Skip extra RPC checks for user accounts |
+| dynamicSlippage | boolean | No | Allow the upstream builder to overwrite slippage |
+| blockhashSlotsToExpiry | integer (>=0) | No | Number of slots until the transaction blockhash expires |
+| positiveSlippage | object `{ bps: integer >=0, feeAccount?: string }` | No | Positive-slippage configuration; `bps` is required and `feeAccount` is optional |
 
 **Public response:**
 ```json
@@ -400,6 +481,26 @@ The returned transaction is unsigned — the client signs with `userPublicKey` a
   "split": 1
 }
 ```
+
+## Queued Settlement and Confirmation
+
+Confirmation has two layers:
+
+1. `POST /v1/transaction/send` with `confirm: true` (or direct RPC confirmation) proves that the source
+   transaction was accepted on its declared runtime.
+2. A private queued transfer or private swap delivery is complete only after every scheduled split has
+   credited the destination or entered the refund/recovery path.
+
+The delay window controls when work becomes eligible for scheduling, not a guaranteed completion time.
+Queue entries are removed when settlement actions are scheduled, before payout callbacks report their
+result. Therefore source transaction confirmation and an empty queue are both insufficient evidence of
+recipient payment.
+
+Use `clientRefId` to correlate a private payment, then reconcile destination/private balance and the
+relevant callback/receipt or refund evidence. The current public HTTP surface does not provide a single
+general “final settlement status” endpoint, so applications that promise payment completion must own
+this observation and support pending, settled, and refunded/failed states. For splits, reconcile the
+full group total, not only the first credit.
 
 ## MCP Endpoint
 
@@ -459,14 +560,20 @@ MCP responses include `result.structuredContent` with the same fields as the RES
 
 `GET /mcp` returns a human-readable info document and `GET /.well-known/mcp.json` returns the MCP discovery document.
 
-## Key Details
+## Constraints and defaults
 
 - Amounts are always in base units (e.g., 1 USDC = 1,000,000 with 6 decimals)
 - `mint` defaults to USDC when omitted on deposit
 - `validator` defaults to the ephemeral RPC identity resolved via `getIdentity` when omitted, or to `MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57` for swaps
-- `cluster` accepts `"mainnet"`, `"devnet"`, or a custom `http(s)` RPC URL
-- Private transfers and private swaps support `split` and `minDelayMs`/`maxDelayMs` for timing obfuscation. Transfers allow `split` 1–15; swaps allow 1–14 with `maxDelayMs ≤ 600000` (10 min)
+- `cluster` accepts `"mainnet"`, `"devnet"`, `"mainnet-private"`, `"devnet-private"`, or a custom `http(s)` base RPC override
+- Private transfers and private swaps support `split` and `minDelayMs`/`maxDelayMs` for timing obfuscation. Transfers allow `split` 1–15; swaps allow 1–14 with `maxDelayMs ≤ 600000` (10 min). These delays control scheduling eligibility, not guaranteed settlement time
 - Set `initIfMissing`, `initAtasIfMissing`, and `initVaultIfMissing` all to `true` for the simplest deposit integration
-- `idempotent`: when `true`, init instructions use idempotent variants
-- `gasless` transfers use the configured sponsor as fee payer and prepend a relay-fee token transfer to the sponsor ATA
-- Auth: `/v1/spl/private-balance` always requires `Authorization: Bearer <token>`. `/v1/spl/transfer` only requires it when the route needs the Private ER. All other endpoints are unauthenticated
+- `initIfMissing` initializes an eATA, not the validator-scoped transfer queue; mint initialization is a
+  separate endpoint
+- `idempotent` selects a builder for that deposit or withdrawal request; the request does not establish
+  an account-level lifecycle setting. Deposit and withdrawal choose independently. The SDK's explicit
+  `undelegateIx` has no mode flag
+- SPL SOL routes use the native WSOL mint `So11111111111111111111111111111111111111112`. The API can wrap a deficient base-source balance, but WSOL token balance and wallet lamports remain distinct; private swaps do not accept `nativeDestinationAccount`
+- Transfer platform fees require `platformFeeAccount`, are charged in the transferred token, and are supported only when `fromBalance` is `"base"`
+- `gasless` transfers require a configured sponsor, an approved stablecoin, and at least 0.5 USDC/USDT; they prepend a 0.2 USDC/USDT relay-fee transfer. Off-curve senders do not receive gasless handling
+- Auth: `/v1/spl/private-balance` and `/v1/spl/stealth-pool` always require `Authorization: Bearer <token>`. `/v1/spl/transfer`, `/v1/spl/undelegate-ephemeral-ata`, and `/v1/transaction/send` require it when their route or confirmation uses the Private ER; ordinary public builder routes do not
