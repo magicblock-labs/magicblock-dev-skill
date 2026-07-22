@@ -132,9 +132,7 @@ from Devnet.
 ## Rust Dependencies Snapshot
 
 Rust snapshot verified **2026-07-22** against crates.io (`0.16.2`); the TypeScript snapshot
-remains `0.15.5` (npm latest was `0.16.1`). Note the `v0.16.2` GitHub tag was not yet pushed at
-verification time — crates.io is the source of truth for the Rust release. Re-check before
-calling it latest:
+remains `0.15.5` (npm latest was `0.16.1`). Re-check before calling it latest:
 
 ```bash
 cargo info ephemeral-rollups-sdk@0.16.2
@@ -207,7 +205,7 @@ Additional product/tool snapshots verified **2026-07-15**; re-check before insta
 - [Local development guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
-- [Ephemeral Rollups SDK source](https://github.com/magicblock-labs/ephemeral-rollups-sdk) — use the tag matching your pinned version (`v0.16.2` tag not yet pushed as of 2026-07-22; the crate is on crates.io)
+- [Ephemeral Rollups SDK source](https://github.com/magicblock-labs/ephemeral-rollups-sdk) — use the tag matching your pinned version
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)
 - [Private Payments API Reference](https://payments.magicblock.app/reference)
 - [Private Payments live OpenAPI document](https://payments.magicblock.app/doc) — mutable hosted
