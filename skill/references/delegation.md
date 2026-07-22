@@ -12,13 +12,13 @@ project's versions unless the task explicitly requests an upgrade.
 # Cargo.toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor"] }
 
 # Anchor line is selected by the SDK feature flag:
 #   "anchor"        → Anchor 1.x
 #   "anchor-compat" → Anchor >=0.28,<1.0
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
 ```
 
 ### Imports

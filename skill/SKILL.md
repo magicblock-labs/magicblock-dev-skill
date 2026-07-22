@@ -31,7 +31,7 @@ the delegation program on base, owned by the original program on the ER endpoint
 returned by router `getDelegationStatus`, and cloned into the ER with
 `delegated=true`.
 
-For the verified SDK v0.15.5 snapshot, use **MagicIntentBundleBuilder** to
+For the verified SDK v0.16.2 snapshot, use **MagicIntentBundleBuilder** to
 schedule commit and commit-and-undelegate intents. Do not use the deprecated
 free functions `commit_accounts` and `commit_and_undelegate_accounts`.
 
@@ -90,7 +90,7 @@ Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported
 - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
 - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
   callback macro authenticates fulfillment. Enable the `vrf` feature on `ephemeral-rollups-sdk`.
-  SDK v0.15.5 re-exports VRF, so new Anchor code does not need a direct
+  SDK v0.16.2 re-exports VRF, so new Anchor code does not need a direct
   `ephemeral-vrf-sdk` dependency. See [vrf.md](references/vrf.md).
 
 **Non-Anchor programs:** use the

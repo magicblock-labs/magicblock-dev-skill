@@ -19,17 +19,17 @@ updates state.
 
 ## Dependencies
 
-In the SDK v0.15.5 snapshot verified 2026-07-13, VRF is exposed through the
+In the SDK v0.16.2 snapshot verified 2026-07-22, VRF is exposed through the
 main SDK. Enable its `vrf` feature; Anchor programs using this snapshot do not
 need a direct `ephemeral-vrf-sdk` dependency.
 
-The `magicblock-engine-examples/roll-dice/anchor` example at revision `1d11428` separately pins Rust
-SDK `0.15.4` and app TypeScript SDK `0.14.3`. Treat those as example provenance, not as the dependency
-version for the `0.15.5` snippets below.
+The `magicblock-engine-examples/roll-dice/anchor` example pins Rust SDK `0.16.2` (as of the
+2026-07-22 working tree) and app TypeScript SDK `0.14.3`. Treat those as example provenance, not as
+the dependency version for the `0.16.2` snippets below.
 
 ```toml
 [dependencies]
-ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "vrf"] }
+ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "vrf"] }
 ```
 
 Use the scoped API below: `ephemeral_rollups_sdk::vrf`,

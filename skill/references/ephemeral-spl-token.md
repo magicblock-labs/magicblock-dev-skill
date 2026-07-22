@@ -13,13 +13,13 @@ Sources of truth:
 2. **TypeScript SDK**: `@magicblock-labs/ephemeral-rollups-sdk` — high-level
    `delegateSpl` / `transferSpl` / `undelegateIx` / `withdrawSpl` helpers plus
    per-instruction builders and PDA derivations.
-3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` at engine-examples revision
-   `1d11428` — end-to-end Anchor program + tests exercising the full lifecycle. At that revision its
-   Rust program pins SDK `0.14.3`, its root TS package pins `0.14.3`, and its app pins `0.15.3`; treat
+3. **Working example**: `magicblock-engine-examples/spl-tokens/anchor` — end-to-end Anchor
+   program + tests exercising the full lifecycle. As of the 2026-07-22 working tree its
+   Rust program pins SDK `0.16.2`, its root TS package pins `0.14.3`, and its app pins `0.15.3`; treat
    those as example provenance, not as the dependency snapshot below.
 
-SDK version example, verified 2026-07-13: TS + Rust
-`ephemeral-rollups-sdk` **0.15.5**, with Anchor **1.0.2** for modern Anchor
+SDK version example, verified 2026-07-22: Rust `ephemeral-rollups-sdk` **0.16.2**
+(TS snapshot remains **0.15.5**; npm latest was **0.16.1**), with Anchor **1.0.2** for modern Anchor
 programs. Preserve an existing target repo's compatible versions unless the
 task explicitly requests an upgrade; see [resources.md](resources.md).
 
@@ -324,7 +324,7 @@ Cargo dependencies (snapshot):
 ```toml
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
 anchor-spl = { version = "1.0.2" }
-ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor"] }
 ```
 
 Calling it from the client — the transaction targets the **ER endpoint**, so

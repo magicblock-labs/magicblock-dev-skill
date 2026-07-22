@@ -73,18 +73,20 @@ that version line.
 > `gachapon-example/programs/gachapon-example` use 1.0.2. Inspect the target example's `Cargo.toml` and
 > preserve its version line unless the task explicitly requests a migration.
 
-Example provenance verified at `magicblock-engine-examples` revision `1d11428` on **2026-07-16**:
+Example provenance verified in the `magicblock-engine-examples` working tree on **2026-07-22**
+(all active examples' Rust SDK pins updated to `0.16.2`; every example passes `cargo check`):
 
 | Exact example path | Rust SDK | TypeScript SDK |
 |---|---:|---:|
-| `spl-tokens/anchor` | `0.14.3` | root `0.14.3`; app `0.15.3` |
-| `magic-actions/anchor` | `0.14.3` | `0.14.3` |
-| `binary-prediction/anchor` | `=0.14.3` | `0.14.3` |
-| `roll-dice/anchor` | `0.15.4` | app `0.14.3` |
+| `spl-tokens/anchor` | `0.16.2` | root `0.14.3`; app `0.15.3` |
+| `magic-actions/anchor` | `0.16.2` | `0.14.3` |
+| `binary-prediction/anchor` | `0.16.2` | `0.14.3` |
+| `roll-dice/anchor` | `0.16.2` | app `0.14.3` |
 
-These are working-example snapshots, not one mutually compatible version recommendation. The registry
-latest was `0.16.0` on **2026-07-16**, while the code snippets in this skill intentionally use the
-separately verified `0.15.5` SDK snapshot. Preserve a target repo's version line unless upgrading it
+These are working-example snapshots, not one mutually compatible version recommendation. The
+crates.io latest was `0.16.2` on **2026-07-22** and the Rust snippets in this skill use that
+verified snapshot; the npm latest was `0.16.1`, and the TypeScript snippets remain on the
+separately verified `0.15.5` snapshot. Preserve a target repo's version line unless upgrading it
 explicitly.
 
 ## Key Program IDs
@@ -129,27 +131,29 @@ from Devnet.
 
 ## Rust Dependencies Snapshot
 
-Snapshot verified **2026-07-13** against both package registries and the
-`v0.15.5` SDK tag. Re-check before calling it latest:
+Rust snapshot verified **2026-07-22** against crates.io (`0.16.2`); the TypeScript snapshot
+remains `0.15.5` (npm latest was `0.16.1`). Note the `v0.16.2` GitHub tag was not yet pushed at
+verification time — crates.io is the source of truth for the Rust release. Re-check before
+calling it latest:
 
 ```bash
-cargo info ephemeral-rollups-sdk@0.15.5
+cargo info ephemeral-rollups-sdk@0.16.2
 npm view @magicblock-labs/ephemeral-rollups-sdk@0.15.5 version
 git ls-remote --tags \
   https://github.com/magicblock-labs/ephemeral-rollups-sdk.git \
-  refs/tags/v0.15.5
+  "refs/tags/v0.16.*"
 ```
 
 ```toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor"] }
 
 # Feature flag picks the Anchor line:
 #   "anchor"        → Anchor 1.x
 #   "anchor-compat" → Anchor >=0.28,<1.0
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
 
 # For cranks
 magicblock-magic-program-api = { version = "0.10.1", default-features = false }
@@ -157,7 +161,7 @@ bincode = "^1.3"
 sha2 = "0.10"
 
 # For VRF, enable the SDK's scoped VRF API
-# ephemeral-rollups-sdk = { version = "0.15.5", features = ["anchor", "vrf"] }
+# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "vrf"] }
 ```
 
 For a real repo, keep its existing compatible version line unless doing an
@@ -203,7 +207,7 @@ Additional product/tool snapshots verified **2026-07-15**; re-check before insta
 - [Local development guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
-- [Ephemeral Rollups SDK v0.15.5 source](https://github.com/magicblock-labs/ephemeral-rollups-sdk/tree/v0.15.5)
+- [Ephemeral Rollups SDK source](https://github.com/magicblock-labs/ephemeral-rollups-sdk) — use the tag matching your pinned version (`v0.16.2` tag not yet pushed as of 2026-07-22; the crate is on crates.io)
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)
 - [Private Payments API Reference](https://payments.magicblock.app/reference)
 - [Private Payments live OpenAPI document](https://payments.magicblock.app/doc) — mutable hosted
