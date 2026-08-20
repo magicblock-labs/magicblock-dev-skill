@@ -17,7 +17,7 @@ commit can consume the fee budget held in delegation PDAs and be charged later a
 
 | Bucket | Active amount | When it is charged | Source of funds |
 |---|---:|---|---|
-| ER signature fee | Validator-configurable; release default is `0` | Every executed ER transaction | ER transaction fee payer |
+| ER transaction fee | `0` in the current release | Every executed ER transaction | No debit |
 | Intent scheduling fee | `0` | When an intent bundle is scheduled | No standalone debit |
 | Delegation session fee | `300_000` lamports | Delegation cleanup at undelegation | Delegation record + metadata PDAs |
 | Delegation commit fee | `100_000` lamports for each finalized commit after the first | Delegation cleanup at undelegation | Delegation record + metadata PDAs, capped by their combined balance |
@@ -30,20 +30,10 @@ Base-layer Solana transaction fees for delegation, top-up, settlement, or other 
 separate. Product-specific charges in other programs, such as the Ephemeral SPL Token sponsored
 lamports-transfer setup charge, are also separate.
 
-## 1. ER transaction signature fee
+## 1. ER transaction fee
 
-The validator's release configuration defaults `validator.basefee` to `0`. The runtime computes the
-signature fee as:
-
-```text
-number of transaction signatures * configured basefee
-```
-
-The value is configurable by a validator operator, so `0` is a default, not a protocol invariant for
-every public, private, or dedicated deployment. Query the target validator when an exact runtime cost
-matters.
-
-This ordinary ER signature fee is independent of commit, delegation, and Magic Action fees.
+The current validator release charges `0` for ordinary ER transaction execution. Commit,
+delegation, and Magic Action fees are separate.
 
 The current `ScheduledIntentBundle::calculate_fee` also declares `SCHEDULING_FEE = 0`. Intent bundles
 therefore have no additional flat scheduling charge; only their commit, Base Action, and callback
@@ -325,7 +315,6 @@ billable bundle, ensure its ER balance covers:
 per-account live commit fees
 + Base Action fees
 + callback attachment fee, if sent separately
-+ any configured ER signature fee
 + application safety buffer
 ```
 
@@ -390,9 +379,8 @@ Pinned source: [Delegation Program fee constants](https://github.com/magicblock-
 
 ### MagicBlock validator
 
-- `magicblock-config/src/consts.rs`: release default ER base fee
+- `magicblock-config/src/consts.rs`: current release ER transaction fee of `0`
 - `magicblock-config/src/config/chain.rs`: operator-side base commit compute-unit price setting
-- `magicblock-processor/src/executor/processing.rs`: signature-fee formula
 - `programs/magicblock/src/magic_sys.rs`: hard commit limit and custom errors
 - `programs/magicblock/src/schedule_transactions/mod.rs`: limit enforcement and fee-vault selection
 - `magicblock-core/src/intent/mod.rs`: live commit threshold, commit amount, and Base Action formula
