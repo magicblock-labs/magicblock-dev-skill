@@ -3,11 +3,12 @@
 To add lamports to a delegated account, submit a base-layer transaction through the Ephemeral SPL
 Token program. The program funds and delegates a sponsored, single-use lamports PDA, allowing the ER
 to credit the destination. This supports delegated fee payers described in
-[delegation.md](delegation.md).
+[delegation.md](delegation.md). For the payer's exact commit, action, and callback budget, read
+[fees-and-commit-economics.md](fees-and-commit-economics.md) first.
 
 ## When to use
 
-- A delegated PDA (e.g. a fee payer for sponsored commits) is running low on lamports on the ER side.
+- A delegated PDA (e.g. the payer for long-lived fee-vault commits) is running low on lamports on the ER side.
 - You need to top up the lamport balance of a delegated account that already exists on base layer and has a delegation record.
 - The payer must fund a single-use top-up without destination participation.
 
@@ -128,6 +129,17 @@ is not delegated. Delegate first, then top up.
 The payer pays the base-layer transaction fee, the `amount` being shuttled, and the current fixed
 `300_000`-lamport sponsored-transfer setup charge. Verify current program constants before production
 use and require a balance comfortably above that total.
+
+This `300_000`-lamport setup charge belongs to the Ephemeral SPL Token sponsored-transfer flow. It is
+not the Delegation Program's separate `300_000`-lamport session fee, even though the active numeric
+values happen to match.
+
+### A depleted delegated fee payer fails the whole billable bundle
+
+The validator subtracts the complete calculated commit/action fee with checked arithmetic. If the
+delegated payer lacks the full amount, scheduling fails with `InstructionError::InsufficientFunds`;
+there is no partial debit. Top up before retrying and re-run application authorization and budget
+checks rather than treating a top-up as permission to spend without limit.
 
 ### Reject zero-value top-ups
 

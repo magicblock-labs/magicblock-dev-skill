@@ -194,7 +194,7 @@ MagicIntentBundleBuilder::new(
     magic_context.to_account_info(),
     magic_program.to_account_info(),
 )
-.magic_fee_vault(magic_fee_vault.to_account_info())      // see commit-sponsorship section in delegation.md
+.magic_fee_vault(magic_fee_vault.to_account_info())      // see fees-and-commit-economics.md
 .commit(&[reward_list.to_account_info()])                // committed account(s) — can differ from payer
 .add_post_commit_actions([action])
 .build_and_invoke_signed(&[payer_seeds])?;

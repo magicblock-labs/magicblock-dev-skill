@@ -121,11 +121,12 @@ options. With both installed, agents use `solana-dev` for base-layer work and th
 - VRF (Verifiable Random Function) for provable randomness
 - Magic Actions — base-layer instructions chained to an ER commit
 - Topping up delegated accounts with lamports via `lamportsDelegatedTransferIx`
+- ER fees across delegation deposits, refunds, commit limits, `magic_fee_vault`, Magic Actions, and
+  validator claims
 - Ephemeral SPL Token lifecycle: deposit, transfer, app-program CPI, undelegate, withdraw
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with wallet challenge/login bearer auth for private reads and protected Private-ER routes)
-- Commit sponsorship and lifting the 10-commit default with `magic_fee_vault`
 - Local development and environment-specific validation
 - Cross-product composition patterns and their security/settlement boundaries
 - Source-backed MagicBlock security guidance that separates protocol guarantees, integration checks,
