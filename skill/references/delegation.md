@@ -446,26 +446,28 @@ data PDA for permission rent before delegation.
 - Calling deprecated `commit_accounts` or `commit_and_undelegate_accounts`; use `MagicIntentBundleBuilder`
 - Creating or delegating a base-layer PER permission account; permissions are ER-local
 
-## Commit Sponsorship & Fee Vault
+## Commit Limits & Fee Vault
 
-MagicBlock sponsors **10 commits per delegated account by default**. Each delegation receives 10
-base-layer commits without an application-funded fee vault.
+Read [fees-and-commit-economics.md](fees-and-commit-economics.md) before estimating costs or describing
+commits as free. The Delegation Program collects session and after-first-commit charges from delegation
+PDA deposits at undelegation, while the validator separately enforces live commit limits and fees.
 
-When the sponsored quota is exhausted, you have two options:
+Without a delegated payer, the validator accepts ten plain commits and hard-fails the next one. When
+the limit is reached, you have two options:
 
 ### Option 1: Re-delegate to refresh the quota
 
-Undelegating and re-delegating the account refreshes the sponsored commit
-allowance. This fits flows that already cycle through
+Undelegating and re-delegating the account resets its commit nonce. This fits flows that already cycle through
 delegation boundaries (session start → play → session end → next session).
-No fee-vault accounts or builder methods are required; delegate the account again.
+No fee-vault accounts or builder methods are required. Undelegation still settles the session and
+commit charges from the delegation PDAs before refunding the remainder to the recorded rent payer.
 
 ### Option 2: Pay your own commits via `magic_fee_vault` + delegated fee payer
 
-For long-lived delegations or high commit frequency, attach a
-`magic_fee_vault` to the intent bundle and use a delegated fee payer (a
-PDA payer that signs via seeds). This lifts the sponsored cap: the delegated
-payer pays the commit fee, and the validator-scoped fee vault receives it.
+For long-lived delegations or high commit frequency, attach a `magic_fee_vault` to the intent bundle
+and use a delegated fee payer, usually a PDA that signs via seeds. This selects the validator's
+fee-vault path. Commits 1 through 25 have no additional live debit; commit 26 and later debit
+`100_000` lamports per committed account. Delegation cleanup fees still apply separately.
 
 #### Deriving the fee vault PDA
 
@@ -516,15 +518,16 @@ MagicIntentBundleBuilder::new(
 .build_and_invoke_signed(&[payer_seeds])?;
 ```
 
-The fee vault must be passed in the outer instruction's accounts context
-as a writable `AccountInfo`. It is credited on each paid commit; the delegated
-payer is debited.
+The fee vault must be passed in the outer instruction's accounts context as a writable `AccountInfo`.
+The payer must be delegated, non-confined, writable, and able to sign. The vault must be the canonical
+validator-scoped PDA, writable, and delegated. A billable bundle fails atomically with
+`InsufficientFunds` when the payer cannot cover its per-account commit fees plus any Base Action fees.
 
 #### When to pick which option
 
 | Pattern | Recommended path |
 |---|---|
-| Short delegations (<10 commits per session) | Default sponsorship — do nothing |
-| Sessionized flows that re-delegate naturally | Re-delegate to refresh quota |
+| Short delegations (at most 10 plain commits per session) | No fee-vault wiring; budget for cleanup fees |
+| Sessionized flows that re-delegate naturally | Re-delegate to reset the nonce and settle/refund the session |
 | Long-lived or high-frequency commits | `magic_fee_vault` + delegated fee payer |
 | PDA-driven backend dispatching commits on behalf of users | `magic_fee_vault` + delegated fee payer (PDA must be the payer) |

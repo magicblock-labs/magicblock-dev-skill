@@ -60,7 +60,7 @@ and why nearby alternatives were rejected.
 | Verifiable randomness | VRF | Model request, callback, oracle dependency, and callback failure |
 | Repeated scheduled execution | Cranks | Model interval, iteration limits, cancellation, failure, and commit cost |
 | Base-layer effect tied to an ER commit | Magic Actions | Define the post-commit instruction, committor retry behavior, observation, and reconciliation |
-| More than the default sponsored commit allowance | Fee vault sponsorship | Model the delegated payer that is debited, validator fee vault that is credited, funding, and top-up path |
+| More than 10 commits without a fee vault | Delegated payer + fee-vault path | Model cleanup charges, live debits from commit 26, payer funding, and top-ups |
 
 Do not conflate PER with Private Payments. PER protects access to delegated program state; Private
 Payments exposes a managed private-balance and transfer API.

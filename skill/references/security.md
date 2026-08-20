@@ -158,13 +158,15 @@ Sources: [enqueue transfer](https://github.com/magicblock-labs/ephemeral-spl-tok
 - Verify a scheduler's authority, retry, and cancellation behavior from the pinned implementation; do
   not claim every crank is permissionless or exactly-once.
 - Supplying `magic_fee_vault` changes commit-fee handling. Validate the canonical writable/delegated
-  vault and delegated payer required by the current program. The payer is debited and the validator-
-  scoped vault is credited; treat user budgets and spending caps as application/operator policy.
+  vault and delegated, non-confined payer required by the current program. The payer is debited and
+  the validator-scoped vault is credited; treat user budgets and spending caps as
+  application/operator policy. Read [fees-and-commit-economics.md](fees-and-commit-economics.md) before
+  assessing thresholds, refunds, or failure behavior.
 - Keep generic Solana signer, account-owner, PDA, executable-program, token-authority, and arithmetic
   checks in the Solana review. Repeat them here only when a MagicBlock product defines a specific
   identity or cross-runtime relationship.
 
-Sources: [Magic Program fee handling](https://github.com/magicblock-labs/magicblock-validator/blob/efcebacf3b987a194430e4d7250273b7e9937ff0/programs/magicblock/src/schedule_transactions/mod.rs) and
+Sources: [Magic Program fee handling](https://github.com/magicblock-labs/magicblock-validator/blob/cec4cf574ace267029e9487b61780d5218256b42/programs/magicblock/src/schedule_transactions/mod.rs) and
 [MagicBlock security audits](https://docs.magicblock.gg/pages/overview/additional-information/security-and-audits).
 
 ## Review output

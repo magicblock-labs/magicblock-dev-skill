@@ -44,10 +44,12 @@ that affected `TransactionStrategy` before retrying its remaining commit strateg
 transaction/finalize strategies are outside that removal scope. Observe and reconcile every originally
 scheduled action: scheduling or eventual commit success alone does not prove that any of them ran.
 
-**Commit sponsorship**: every delegated account gets 10 free commits to base layer by default. To lift
-the cap, either re-delegate (refreshes the quota) or attach the validator-scoped `magic_fee_vault` PDA
-and a delegated fee payer to the intent bundle. The delegated payer is debited; the fee vault is the
-validated destination credited with that commit fee.
+**Commit fees and limits** span the Delegation Program and validator. Without the fee-vault path, a
+plain commit fails once the account's current nonce reaches 10; accepted commits can still consume
+the delegation PDA fee budget at undelegation. With a delegated payer and validator-scoped
+`magic_fee_vault`, commit 26 starts debiting `100_000` lamports per committed account. Read
+[fees-and-commit-economics.md](references/fees-and-commit-economics.md) first for fee, refund,
+sponsorship, cost-estimation, or fee-payer funding questions.
 
 **Lamports top-up**: when a delegated account (e.g. a delegated fee payer) needs more lamports on the ER side, use `lamportsDelegatedTransferIx` from the SDK. The transaction is submitted on **base layer** — the Ephemeral SPL Token program creates a single-use lamports PDA, funds it, and delegates it so the ER credits the destination.
 
@@ -218,6 +220,7 @@ When you implement changes, provide:
 - MagicBlock-specific security boundaries and source standards: [security.md](references/security.md)
 - Debugging ER/delegation failures: [debugging.md](references/debugging.md)
 - Core delegation patterns: [delegation.md](references/delegation.md)
+- Fees, commit limits, delegation refunds, action charges, and fee-vault economics: [fees-and-commit-economics.md](references/fees-and-commit-economics.md)
 - Ephemeral Accounts (ER-only temporary state): [ephemeral-accounts.md](references/ephemeral-accounts.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](references/magic-actions.md)
 - Topping up a delegated account with lamports: [lamports-topup.md](references/lamports-topup.md)
