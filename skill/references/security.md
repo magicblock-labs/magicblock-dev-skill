@@ -55,6 +55,33 @@ that any originally scheduled action in the affected strategy ran.
 
 Source: [Magic Actions troubleshooting and atomicity](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/magic-actions/troubleshooting).
 
+## Post-commit action handlers must authenticate the caller
+
+*Integration validation.* A `#[action]` handler is a normal base-layer
+instruction; the attribute makes it dispatchable from a post-commit action, not
+exclusively so. Anyone can invoke it directly with a wallet. Address/seed/`owner`
+constraints (including `address = crate::ID` on a `source_program`) only pin the
+accounts passed — they do not prove who called it.
+
+- Require the injected `escrow` account as `signer` and pin it to
+  `ephemeral_balance_pda_from_payer(escrow_auth, 255)` (the `ActionArgs::new`
+  default index). Only the delegation program can sign for that PDA, so this
+  proves the call came through the real post-commit path.
+- When the handler signs with a program-owned PDA to move the program's assets,
+  additionally bind `escrow_auth` to that PDA — otherwise a foreign program can
+  schedule an action into your handler with its own escrow authority.
+- Apply to every handler that mutates authoritative state or moves value —
+  leaderboard writes, status flags, mints, settlements, token/NFT transfers
+  alike. No action type is exempt.
+
+Failure mode to avoid: a post-commit handler that authenticates with only
+`source_program == crate::ID` and account seed/`owner` constraints — never the
+escrow signer — can be invoked directly by any wallet, which then wields whatever
+authority the handler carries (writing the program's state, or signing with a
+program PDA to move its assets).
+
+Source: [Magic Actions — action handler instruction](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/magic-actions/how-to).
+
 ## Session Keys require application-defined limits
 
 The session token binds a temporary signer to a wallet authority, target program, and validity period.
