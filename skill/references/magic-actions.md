@@ -15,6 +15,7 @@ Do not report the action complete from the ER signature alone.
 
 - [When to use](#when-to-use)
 - [Action handler instruction](#action-handler-instruction-target-of-the-call)
+- [Verify the caller in the handler](#verify-the-caller-in-the-action-handler)
 - [Schedule a commit and action](#schedule-a-commit--action-from-the-er)
 - [Multiple actions](#multiple-actions)
 - [Commit-and-undelegate](#commit-and-undelegate-with-actions)
@@ -75,6 +76,142 @@ pub struct UpdateLeaderboard<'info> {
     pub counter: UncheckedAccount<'info>,
 }
 ```
+
+## Verify the Caller in the Action Handler
+
+### What `escrow` and `escrow_auth` are, and why they exist
+
+Each post-commit action runs as its own base-layer transaction, so it needs an
+account to pay that transaction's fee and any rent it creates. The delegation
+program uses an **ephemeral balance escrow**: a SOL-holding PDA derived from
+`[b"balance", escrow_auth, escrow_index]`, funded ahead of time. The `#[action]`
+macro injects two accounts for it:
+
+- `escrow_auth` — the authority that owns/funds that balance (the *payer
+  identity*): the user's wallet for user-paid actions, a program PDA for
+  program-paid actions.
+- `escrow` — the SOL balance PDA itself. The delegation program **signs it via
+  `invoke_signed`** to pay for the action.
+
+That fee-payer signature is also the security anchor: only the delegation program
+can sign for `escrow`, so its presence as a `signer` is the one fact proving your
+handler was reached through the real post-commit path — not called directly.
+
+### Why the check is required
+
+A `#[action]` handler is an **ordinary base-layer instruction** — whatever work
+it does (writing a PDA it owns, updating a leaderboard, minting, settling,
+transferring tokens; no action type is special here). The attribute makes it
+*callable from* a post-commit action; it
+does not make it callable *only* that way. Anyone can invoke it directly with a
+wallet. `seeds`, `owner`, and `#[account(address = crate::ID)]` constraints only
+pin *which* accounts are passed — they never authenticate *who* called. Whatever
+authority the handler wields (writing a PDA it owns, signing a transfer with a
+program PDA), an unauthenticated caller wields too. A comment that says "only
+reachable via the post-commit machinery" is wrong unless the context enforces it.
+
+### The check
+
+**Always**, on every `#[action]` context: require `escrow` as `signer` and pin it
+to `ephemeral_balance_pda_from_payer(escrow_auth, 255)` (`ActionArgs::new`
+defaults `escrow_index` to `255`). This proves the delegation program dispatched
+the call for escrow authority `escrow_auth`.
+
+```rust
+pub const ACTION_ESCROW_INDEX: u8 = 255; // ActionArgs::new default
+
+#[action]
+#[derive(Accounts)]
+pub struct UpdateLeaderboard<'info> {
+    #[account(mut, seeds = [LEADERBOARD_SEED], bump)]
+    pub leaderboard: Account<'info, Leaderboard>,
+    /// CHECK: read at the call site.
+    pub counter: UncheckedAccount<'info>,
+
+    /// CHECK: payer identity the action was scheduled with.
+    pub escrow_auth: UncheckedAccount<'info>,
+    /// CHECK: only the delegation program can sign for this PDA, so `signer`
+    /// proves the call arrived through the real post-commit path.
+    #[account(
+        signer @ MyError::Unauthorized,
+        address = ephemeral_rollups_sdk::pda::ephemeral_balance_pda_from_payer(
+            &escrow_auth.key(),
+            ACTION_ESCROW_INDEX,
+        ) @ MyError::Unauthorized,
+    )]
+    pub escrow: UncheckedAccount<'info>,
+}
+```
+
+**Additionally**, when the handler acts under the authority of a **program-owned
+PDA** — signing with it to move assets or write state the program controls
+(`build_and_invoke_signed` flows) — bind `escrow_auth` to that PDA, so only
+actions *your* program scheduled, not a foreign program's, can drive the handler:
+
+```rust
+/// CHECK: must be the program PDA this program schedules its actions with.
+#[account(address = vault_authority.key() @ MyError::Unauthorized)]
+pub escrow_auth: UncheckedAccount<'info>,
+```
+
+For user-paid actions `escrow_auth` is the user's wallet, so the signer +
+derivation check is the guarantee and there is no fixed PDA to bind against.
+
+### Making the handler callable directly too
+
+Putting the escrow checks in `#[account(...)]` constraints makes the instruction
+**action-only** — a direct caller cannot satisfy the escrow signer. When the same
+logic must also run outside a post-commit action (an admin settlement, or the
+user acting for themselves), the default is **two thin instructions over one
+shared function**: keep the `#[action]` entrypoint with its declarative escrow
+checks, add a normal `Signer`-authorized entrypoint, and have both call the same
+internal `fn`.
+
+```rust
+#[action]
+#[derive(Accounts)]
+pub struct DoWorkAction<'info> {
+    #[account(mut)] pub state: Account<'info, State>,
+    /// CHECK: the PDA this program schedules its actions with.
+    #[account(address = state.vault_authority @ MyError::Unauthorized)]
+    pub escrow_auth: UncheckedAccount<'info>,
+    /// CHECK: only the delegation program can sign for this PDA.
+    #[account(
+        signer @ MyError::Unauthorized,
+        address = ephemeral_rollups_sdk::pda::ephemeral_balance_pda_from_payer(
+            &escrow_auth.key(), ACTION_ESCROW_INDEX) @ MyError::Unauthorized,
+    )]
+    pub escrow: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct DoWorkDirect<'info> {
+    // `authority` is whatever direct-caller policy your program defines — the
+    // state's owner, an admin, an allowlisted key. `has_one` is one way to
+    // express it; swap in your own check (e.g. `constraint = ...`).
+    #[account(mut, has_one = authority)] pub state: Account<'info, State>,
+    pub authority: Signer<'info>,
+}
+
+pub fn do_work_action(ctx: Context<DoWorkAction>) -> Result<()> { work(&mut ctx.accounts.state) }
+pub fn do_work_direct(ctx: Context<DoWorkDirect>) -> Result<()> { work(&mut ctx.accounts.state) }
+fn work(state: &mut State) -> Result<()> { /* the real logic, once */ Ok(()) }
+```
+
+Each entrypoint carries exactly the authentication it needs, the action path keeps
+its hard declarative constraints, and there are no positional/optional-account
+pitfalls.
+
+**Single entrypoint (only if you must).** Declare `escrow_auth`/`escrow` yourself
+as `Option<...>` (the macro then leaves them alone) plus an optional `authority`,
+move the checks into the handler body, and require **exactly one** path —
+`via_action ^ via_direct`, never `||`. Validate imperatively, not via
+`#[account(signer, address = ...)]` (which would force the action-only path).
+Injected and optional accounts are positional and the delegation program appends
+its accounts last, so keep `escrow_auth`/`escrow` at the end and line the
+scheduled `CallHandler.accounts` up with the optional slots — fiddly and
+version-sensitive, which is why two instructions is the default.
+
 
 ## Schedule a Commit + Action from the ER
 
@@ -216,6 +353,16 @@ MagicIntentBundleBuilder::new(
 
 Without `#[action]`, the SDK cannot dispatch into the instruction from a post-commit action.
 
+### An `#[action]` handler must authenticate its caller
+
+The attribute only makes the instruction dispatchable from a post-commit action;
+it does not restrict who may call it. Require the injected `escrow` account as
+`signer` and pin it to `ephemeral_balance_pda_from_payer(escrow_auth, 255)`, and
+(for handlers that spend a program-owned PDA) bind `escrow_auth` to that PDA.
+Address/seed/`owner` constraints do not authenticate the caller — anyone can
+supply matching accounts in a direct base-layer transaction. See
+[Verify the caller in the handler](#verify-the-caller-in-the-action-handler).
+
 ### `is_writable` must match the action's actual writes
 
 `ShortAccountMeta { is_writable: true }` for any account the action mutates,
@@ -287,3 +434,4 @@ easier to observe and recover when modeled as separate operations.
 - Reusing `is_writable` assumptions between the outer `#[commit]` context and the action account list;
   they describe different transactions
 - Calling `build_and_invoke()` when the escrow authority is a PDA
+- Authenticating an `#[action]` handler with only seed/`owner`/`address = crate::ID` constraints instead of the injected `escrow` signer — the instruction is directly callable on the base layer and can be driven by anyone
