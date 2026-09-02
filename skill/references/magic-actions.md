@@ -81,20 +81,23 @@ pub struct UpdateLeaderboard<'info> {
 
 ### What `escrow` and `escrow_auth` are, and why they exist
 
-Each post-commit action runs as its own base-layer transaction, so it needs an
-account to pay that transaction's fee and any rent it creates. The delegation
-program uses an **ephemeral balance escrow**: a SOL-holding PDA derived from
+An action is a delegation-program instruction the committor runs on the base layer
+after a commit; the validator pays its transaction fee. The handler may still need
+an on-chain payer for any **rent** the action creates (for example, initializing an
+ATA). For that the delegation program uses an **ephemeral balance escrow**: a
+SOL-holding PDA derived from
 `[b"balance", escrow_auth, escrow_index]`, funded ahead of time. The `#[action]`
 macro injects two accounts for it:
 
 - `escrow_auth` — the authority that owns/funds that balance (the *payer
   identity*): the user's wallet for user-paid actions, a program PDA for
   program-paid actions.
-- `escrow` — the SOL balance PDA itself. The delegation program **signs it via
-  `invoke_signed`** to pay for the action.
+- `escrow` — the SOL balance PDA itself. When the delegation program runs the
+  action it **signs `escrow` via `invoke_signed`**, so the handler can spend it
+  for rent.
 
-That fee-payer signature is also the security anchor: only the delegation program
-can sign for `escrow`, so its presence as a `signer` is the one fact proving your
+That escrow signature is also the security anchor: only the delegation program can
+sign for `escrow`, so its presence as a `signer` is the one fact proving your
 handler was reached through the real post-commit path — not called directly.
 
 ### Why the check is required
