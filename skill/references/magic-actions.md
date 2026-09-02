@@ -128,6 +128,10 @@ pub struct UpdateLeaderboard<'info> {
     /// CHECK: read at the call site.
     pub counter: UncheckedAccount<'info>,
 
+  /// CHECK: program that scheduled the action.
+  #[account(address = crate::ID @ MyError::Unauthorized)]
+  pub source_program: UncheckedAccount<'info>,
+
     /// CHECK: payer identity the action was scheduled with.
     pub escrow_auth: UncheckedAccount<'info>,
     /// CHECK: only the delegation program can sign for this PDA, so `signer`
