@@ -107,12 +107,9 @@ add an entry at the top of `CHANGELOG.md`. Use stable `MAJOR.MINOR.PATCH` versio
 - Minor for new product coverage or compatible workflows.
 - Major for incompatible installation or workflow changes.
 
-Bump once per PR, not once per commit. README-only and CI-only changes do not require a bump.
+Bump once per PR, not once per commit. README-only changes do not require a bump.
 If another version lands first, update the PR's version and changelog against the new base.
-The Version check workflow checks this on PRs and pushes to `main`. Repository maintainers
-should make its `version` job a required status check in branch protection.
-
-Run the same check locally before opening a PR:
+Run the version check locally before opening a PR:
 
 ```bash
 git fetch origin
