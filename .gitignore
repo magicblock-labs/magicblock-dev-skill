@@ -15,6 +15,3 @@ Thumbs.db
 
 # Build artifacts
 dist/
-
-# Python validation caches
-__pycache__/

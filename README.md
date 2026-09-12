@@ -114,7 +114,6 @@ Run the version check locally before opening a PR:
 ```bash
 git fetch origin
 python3 scripts/check-version.py --base origin/main
-python3 -m unittest discover -s tests
 ./build.sh
 ```
 
