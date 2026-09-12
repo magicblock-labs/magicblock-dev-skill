@@ -11,6 +11,11 @@ REFERENCE_DIR="$SKILL_DIR/references"
 DIST_DIR="$SCRIPT_DIR/dist"
 SKILL_NAME="magicblock"
 REPO_URL="https://github.com/magicblock-labs/magicblock-dev-skill"
+SKILL_VERSION="$(cat "$SKILL_DIR/VERSION")"
+if [[ ! "$SKILL_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+    echo "Error: skill/VERSION must contain a stable MAJOR.MINOR.PATCH version" >&2
+    exit 1
+fi
 GIT_CONTEXT=false
 GIT_ROOT=""
 if command -v git >/dev/null 2>&1; then
@@ -384,6 +389,7 @@ build_flattened() {
     local ref
     {
         echo "<!-- Auto-generated $label artifact by build.sh from $REPO_URL -->"
+        echo "<!-- Skill version: $SKILL_VERSION -->"
         echo "<!-- Source commit: $SOURCE_COMMIT -->"
         echo "<!-- Source state: $SOURCE_STATE -->"
         echo "<!-- Artifact link mode: $content_mode -->"
@@ -426,6 +432,7 @@ build_system_prompt() {
         else
             echo "<!-- Self-contained prompt: exact canonical-origin publication is not locally proven -->"
         fi
+        echo "<!-- Skill version: $SKILL_VERSION -->"
         echo "<!-- Source commit: $SOURCE_COMMIT -->"
         echo "<!-- Source state: $SOURCE_STATE -->"
         echo "<!-- Artifact link mode: $LINK_MODE -->"
@@ -523,7 +530,8 @@ validate_artifacts() {
             echo "Error: unresolved relative Markdown link in $artifact" >&2
             exit 1
         fi
-        if ! grep -Fq "<!-- Source commit: $SOURCE_COMMIT -->" "$artifact" || \
+        if ! grep -Fq "<!-- Skill version: $SKILL_VERSION -->" "$artifact" || \
+           ! grep -Fq "<!-- Source commit: $SOURCE_COMMIT -->" "$artifact" || \
            ! grep -Fq "<!-- Source state: $SOURCE_STATE -->" "$artifact" || \
            ! grep -Fq "<!-- Source fingerprint: sha256:$SOURCE_FINGERPRINT -->" "$artifact"; then
             echo "Error: incomplete source provenance in $artifact" >&2

@@ -1,0 +1,39 @@
+name: Version check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source and comparison base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
+            git fetch --depth=1 origin "$BASE_SHA"
+          fi
+      - name: Check version and changelog
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          args=()
+          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
+            args=(--base "$BASE_SHA")
+          fi
+          python3 scripts/check-version.py "${args[@]}"
+      - name: Test version enforcement
+        run: python3 -m unittest discover -s tests
+      - name: Build and validate artifacts
+        run: bash build.sh

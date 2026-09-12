@@ -92,6 +92,47 @@ Produces:
 - `dist/magicblock.full.cursor.mdc` — full Cursor rule
 - `dist/magicblock.zip` — zipped `skill/` folder for Claude.ai upload
 
+## Versioning and updates
+
+`skill/VERSION` is the single source of truth for the skill's version, starting at `0.1.0`.
+It is independent of MagicBlock SDK and protocol versions. Folder installs and ZIPs include
+`VERSION`; generated single-file artifacts include a `Skill version` comment.
+Run `./install.sh --version` to print the source checkout's version, or read `VERSION` in
+an installed skill directory.
+
+Every PR changing `skill/`, `build.sh`, or `install.sh` must increase `skill/VERSION` and
+add an entry at the top of `CHANGELOG.md`. Use stable `MAJOR.MINOR.PATCH` versions:
+
+- Patch for corrections and compatible packaging fixes.
+- Minor for new product coverage or compatible workflows.
+- Major for incompatible installation or workflow changes.
+
+Bump once per PR, not once per commit. README-only and CI-only changes do not require a bump.
+If another version lands first, update the PR's version and changelog against the new base.
+The Version check workflow checks this on PRs and pushes to `main`. Repository maintainers
+should make its `version` job a required status check in branch protection.
+
+Run the same check locally before opening a PR:
+
+```bash
+git fetch origin
+python3 scripts/check-version.py --base origin/main
+python3 -m unittest discover -s tests
+./build.sh
+```
+
+To update a manual installation to the latest version on `main`, start from a clean clone:
+
+```bash
+cd magicblock-dev-skill
+git switch main
+git pull --ff-only origin main
+./install.sh --codex  # reuse your original target flags
+```
+
+Installed copies do not update automatically. Review the changelog and rerun the installer
+when updating. Keep using the same target and project directory for project-scoped installs.
+
 ## Recommended companion skill: `solana-dev`
 
 This skill covers MagicBlock-specific patterns: ER/PER, delegation, oracles, Session Keys, cranks, VRF,
