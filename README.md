@@ -108,13 +108,7 @@ Every PR changing `skill/`, `build.sh`, or `install.sh` must increase `skill/VER
 
 Bump once per PR, not once per commit. README-only changes do not require a bump.
 If another version lands first, update the PR's version against the new base.
-Run the version check locally before opening a PR:
-
-```bash
-git fetch origin
-python3 scripts/check-version.py --base origin/main
-./build.sh
-```
+Update `skill/VERSION` manually and run `./build.sh` to rebuild the artifacts.
 
 To update a manual installation to the latest version on `main`, start from a clean clone:
 
