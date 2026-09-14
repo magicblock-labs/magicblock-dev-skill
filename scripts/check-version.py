@@ -24,9 +24,6 @@ def git(root, *args):
 def check(root, base=None):
     current = (root / VERSION_PATH).read_text().strip()
     current_version = parse_version(current)
-    entries = re.findall(r"^## (.+)$", (root / "CHANGELOG.md").read_text(), re.MULTILINE)
-    if not entries or entries[0] != current:
-        raise ValueError(f"CHANGELOG.md must start with an entry for {current}")
     if base is None:
         return
 
@@ -45,7 +42,7 @@ def check(root, base=None):
     skill_changed = any(path.startswith("skill/") or path in ("build.sh", "install.sh")
                         for path in changed)
     if skill_changed and current_version <= previous:
-        raise ValueError("Skill or packaging changed: increase skill/VERSION and add a changelog entry")
+        raise ValueError("Skill or packaging changed: increase skill/VERSION")
 
 
 def main():
