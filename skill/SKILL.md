@@ -26,6 +26,13 @@ the ER with its original program owner. Normal program ownership, signer, author
 constraints still apply on the ER; delegation status is a routing and lifecycle concern, not a new
 application authorization rule.
 
+**Post-delegation actions** attach instructions to a base-layer delegation with
+`delegate_account_with_actions`. The Delegation Program stores them in the delegation record; the
+validator runs them on the ER after cloning. Base-layer delegation success does not prove that the
+action ran. For public or encrypted payloads, signer handling, and recovery, read
+[delegation-actions.md](references/delegation-actions.md). These are distinct from post-commit
+Magic Actions, which run on the base layer.
+
 **Delegation debugging invariant**: a properly delegated account looks owned by
 the delegation program on base, owned by the original program on the ER endpoint
 returned by router `getDelegationStatus`, and cloned into the ER with
@@ -133,6 +140,7 @@ otherwise proceed with explicit assumptions.
 
 - Account initialization (base layer)
 - Delegation (base layer)
+- Post-delegation action (scheduled on base layer; executed on the ER after cloning)
 - Operations on delegated accounts (ephemeral rollup)
 - Commit state (ephemeral rollup)
 - Undelegation (ephemeral rollup)
@@ -220,6 +228,7 @@ When you implement changes, provide:
 - MagicBlock-specific security boundaries and source standards: [security.md](references/security.md)
 - Debugging ER/delegation failures: [debugging.md](references/debugging.md)
 - Core delegation patterns: [delegation.md](references/delegation.md)
+- Post-delegation ER actions, including private payloads: [delegation-actions.md](references/delegation-actions.md)
 - Fees, commit limits, delegation refunds, action charges, and fee-vault economics: [fees-and-commit-economics.md](references/fees-and-commit-economics.md)
 - Ephemeral Accounts (ER-only temporary state): [ephemeral-accounts.md](references/ephemeral-accounts.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](references/magic-actions.md)

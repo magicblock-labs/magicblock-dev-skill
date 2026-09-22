@@ -116,6 +116,7 @@ ALL_REFERENCES=(
     "security.md"
     "debugging.md"
     "delegation.md"
+    "delegation-actions.md"
     "fees-and-commit-economics.md"
     "ephemeral-accounts.md"
     "magic-actions.md"

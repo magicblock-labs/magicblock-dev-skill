@@ -1,5 +1,8 @@
 # Magic Actions (Post-Commit Actions)
 
+For instructions attached to base-layer delegation and run on the ER after cloning, see
+[post-delegation actions](delegation-actions.md).
+
 Magic Actions are base-layer instructions scheduled inside an ER transaction.
 Within each attempted base-layer transaction, the commit and actions execute
 atomically. If any BaseAction fails, however, the committor removes all BaseActions in that affected
