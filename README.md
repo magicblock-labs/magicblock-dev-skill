@@ -116,6 +116,7 @@ options. With both installed, agents use `solana-dev` for base-layer work and th
 - Session Keys for scoped temporary authority
 - Debugging live ER transaction failures, delegation-state mismatches, and router/ER endpoint selection
 - Delegating/undelegating Solana accounts
+- Post-delegation actions executed on the ER, including encrypted private inputs
 - High-performance, low-latency transaction flows
 - Crank scheduling (recurring automated transactions)
 - VRF (Verifiable Random Function) for provable randomness
@@ -147,6 +148,7 @@ Examples:
 Design the MagicBlock architecture for a real-time trading application
 Plan which accounts my multiplayer game should delegate and when they should settle
 Add delegation hooks to my player account
+Attach an encrypted post-delegation action to my private ER account
 Debug why my delegated account gets InvalidWritableAccount
 Change my roll_dice function to use VRF
 Set up a crank that updates game state every 100ms

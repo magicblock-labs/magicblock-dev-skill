@@ -49,6 +49,9 @@ pub mod my_program {
 
 ## Delegate Instruction
 
+To attach an instruction that the validator runs after the account reaches the ER, use
+[post-delegation actions](delegation-actions.md) instead of the plain delegation helper below.
+
 ```rust
 pub fn delegate(ctx: Context<DelegateInput>, uid: String) -> Result<()> {
     // Method name is `delegate_<field_name>` based on the account field
