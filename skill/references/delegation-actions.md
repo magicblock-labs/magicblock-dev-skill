@@ -37,8 +37,8 @@ when constructing the compact form by hand.
 ## Anchor delegation call
 
 The `#[delegate]` accounts context supplies the owner program, buffer, delegation record,
-metadata, delegation program, and system program. For a public action, a handler with a validated
-`validator: Pubkey` can build the payload and call the SDK directly:
+metadata, delegation program, and system program. For a public action, the handler can build the
+payload and call the SDK directly, taking the optional validator from `ctx.remaining_accounts`:
 
 ```rust
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
@@ -68,7 +68,10 @@ delegate_account_with_actions(
         system_program: &ctx.accounts.system_program,
     },
     &[COUNTER_SEED],
-    DelegateConfig { validator: Some(validator), ..Default::default() },
+    DelegateConfig {
+        validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+        ..Default::default()
+    },
     actions,
     &[], // The permissionless example needs no additional action signer.
 )?;
