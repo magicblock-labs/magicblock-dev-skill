@@ -54,6 +54,7 @@ Modifiers:
   --full         For single-file targets, preload every product reference.
                  Default single-file installs keep deep guides on demand
   --path PATH    Install the raw skill/ folder to a custom path
+  --version      Print the version in this source checkout
   -h, --help     Show this help message
 
 Defaults:
@@ -168,6 +169,8 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             CUSTOM_PATH="$2"; shift 2 ;;
+        --version)
+            cat "$SOURCE_DIR/VERSION"; exit 0 ;;
         -h|--help)
             print_help; exit 0 ;;
         *)
