@@ -5,9 +5,9 @@ sponsorship, `magic_fee_vault`, refunds, fee-payer top-ups, Magic Action charges
 claims. The active model is split between the Delegation Program on Solana and the MagicBlock
 validator. Reading either repository alone gives an incomplete answer.
 
-Values below were source-verified on 2026-08-20 against:
+Values below were source-verified on 2026-10-06 against:
 
-- Delegation Program `main` at `6898ef4b82ba1f2b6fbb5d91eca578729edbbeb8`
+- Delegation Program `main` at `cd128709c2fe5577b01e5060e28318e161159887`
 - MagicBlock validator release `master` at `cec4cf574ace267029e9487b61780d5218256b42`
 
 Do not call commits "free" merely because no lamports move during the scheduling instruction. A
@@ -19,8 +19,8 @@ commit can consume the fee budget held in delegation PDAs and be charged later a
 |---|---:|---|---|
 | ER transaction fee | `0` in the current release | Every executed ER transaction | No debit |
 | Intent scheduling fee | `0` | When an intent bundle is scheduled | No standalone debit |
-| Delegation session fee | `300_000` lamports | Delegation cleanup at undelegation | Delegation record + metadata PDAs |
-| Delegation commit fee | `100_000` lamports for each finalized commit after the first | Delegation cleanup at undelegation | Delegation record + metadata PDAs, capped by their combined balance |
+| Delegation session fee | `3_000_000` lamports | Delegation cleanup at undelegation | Delegation record + metadata PDAs |
+| Delegation commit fee | `1_000_000` lamports for each finalized commit after the first | Delegation cleanup at undelegation | Delegation record + metadata PDAs, capped by their combined balance |
 | Extra live commit fee | `100_000` lamports per committed account once its current nonce is at least `25` | When the ER schedules the next commit through the fee-vault path | Delegated fee payer on the ER |
 | Base Action fee | `50_000` micro-lamports per requested CU | When an intent bundle is scheduled through the fee-vault path | Delegated fee payer on the ER |
 | Add-callback fee | `5_000` lamports per callback attachment instruction | When `AddActionCallback` succeeds | Delegated fee payer on the ER |
@@ -71,7 +71,7 @@ The metadata records the original `rent_payer`. At undelegation the program comp
 
 ```text
 commit_count = max(last_commit_id - 1, 0)
-requested_fee = 300_000 + 100_000 * commit_count
+requested_fee = 3_000_000 + 1_000_000 * commit_count
 collectible_fee = min(
   requested_fee,
   delegation_record_lamports + delegation_metadata_lamports
@@ -81,9 +81,9 @@ refund = combined_delegation_PDA_lamports - collectible_fee
 
 Consequences:
 
-- A session with no finalized commit still requests the `300_000`-lamport session fee.
+- A session with no finalized commit still requests the `3_000_000`-lamport session fee.
 - Commit 1 adds no commit fee.
-- Commits 2, 3, and so on add `100_000` lamports each.
+- Commits 2, 3, and so on add `1_000_000` lamports each.
 - Collection is capped by the two PDA balances. An exhausted deposit does not cause
   `InsufficientFunds`, and this path does not record the remainder as debt.
 - Every unused lamport is returned to the `rent_payer` stored at delegation time, not necessarily to
@@ -230,9 +230,9 @@ before cleanup. These examples exclude ordinary Solana transaction fees.
 ### One account, one commit, then undelegate
 
 ```text
-cleanup request = 300_000 + 100_000 * (1 - 1)
-                = 300_000
-cleanup charge  = min(D, 300_000)
+cleanup request = 3_000_000 + 1_000_000 * (1 - 1)
+                = 3_000_000
+cleanup charge  = min(D, 3_000_000)
 refund          = D - cleanup charge
 live commit fee = 0
 ```
@@ -243,9 +243,9 @@ All ten are allowed by the no-vault path because the check happens against the c
 the next commit.
 
 ```text
-cleanup request = 300_000 + 100_000 * (10 - 1)
-                = 1_200_000
-cleanup charge  = min(D, 1_200_000)
+cleanup request = 3_000_000 + 1_000_000 * (10 - 1)
+                = 12_000_000
+cleanup charge  = min(D, 12_000_000)
 refund          = D - cleanup charge
 live commit fee = 0
 ```
@@ -256,9 +256,9 @@ undelegate remains available so the account can exit.
 ### One account, 26 commits through the fee-vault path
 
 ```text
-cleanup request       = 300_000 + 100_000 * (26 - 1)
-                      = 2_800_000
-cleanup charge        = min(D, 2_800_000)
+cleanup request       = 3_000_000 + 1_000_000 * (26 - 1)
+                      = 28_000_000
+cleanup charge        = min(D, 28_000_000)
 live fee-vault debits = 100_000  # commit 26
 refund                = D - cleanup charge
 ```
@@ -321,7 +321,7 @@ per-account live commit fees
 Use `lamportsDelegatedTransferIx` for the SDK's sponsored base-to-ER top-up flow. Read
 [lamports-topup.md](lamports-topup.md) for its routing, salt, setup-charge, and retry rules. Its current
 `300_000`-lamport setup charge comes from the Ephemeral SPL Token program and must not be confused with
-the Delegation Program's `300_000`-lamport session fee.
+the Delegation Program's `3_000_000`-lamport session fee.
 
 The Delegation Program also exposes `top_up_ephemeral_balance`. It creates a zero-data ephemeral
 balance PDA if needed and transfers the requested lamports into it. That instruction adds no explicit
@@ -340,23 +340,6 @@ required rent, and ordinary base transaction fee.
 | Ephemeral Account sponsor cannot cover create/grow rent | `InsufficientFunds` |
 | Delegation deposits cannot cover cleanup request | No underfund error; charge is capped and no debt is recorded |
 | Validator claims more than its base vault holds above rent | `InsufficientFunds` |
-
-## Pending changes are not active pricing
-
-[MIMD-0030](https://github.com/magicblock-labs/magicblock-validator/discussions/1580) is an open
-proposal to raise both active fixed charges by 10x:
-
-- session fee: `300_000` to `3_000_000` lamports;
-- commit fee: `100_000` to `1_000_000` lamports.
-
-It proposes retaining roughly today's upfront delegation funding after Solana rent reductions so the
-reduced rent portion becomes fee budget. The pinned Delegation Program and validator constants above
-still contain the current lower values, so do not quote the proposal as deployed behavior.
-
-The proposal is motivated by
-[SIMD-0437](https://github.com/solana-foundation/solana-improvement-documents/blob/main/proposals/0437-incremental-rent-reduction.md).
-The SIMD document currently labels itself `status: Idea`. Verify the live feature/rent state and both
-repositories before changing production estimates.
 
 ## How to verify current behavior
 
