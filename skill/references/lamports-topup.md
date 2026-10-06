@@ -131,8 +131,7 @@ The payer pays the base-layer transaction fee, the `amount` being shuttled, and 
 use and require a balance comfortably above that total.
 
 This `300_000`-lamport setup charge belongs to the Ephemeral SPL Token sponsored-transfer flow. It is
-not the Delegation Program's separate `300_000`-lamport session fee, even though the active numeric
-values happen to match.
+not the Delegation Program's separate `3_000_000`-lamport session fee.
 
 ### A depleted delegated fee payer fails the whole billable bundle
 
