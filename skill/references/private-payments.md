@@ -12,35 +12,66 @@ required user signatures are added, the client may submit directly to the declar
 **Base URL (mainnet):** `https://payments.magicblock.app`
 
 **Hosted contract snapshot:** endpoint fields, routes, defaults, auth behavior, and fees below were
-verified against the live `/doc` OpenAPI document on **2026-07-16**. This service is mutable. Re-fetch
+verified against the live `/doc` OpenAPI document (`SPL Private Payments API` `0.1.0`) on
+**2026-10-20**. This service is mutable. Re-fetch
 `https://payments.magicblock.app/doc` before implementation and treat any field with no declared schema
 default—such as `exactOut` in this snapshot—as unspecified rather than inferred.
 
+## Deployment status
+
+One hosted deployment serves every network. Select the network per request with `cluster`
+(`mainnet`, `devnet`, `mainnet-private`, `devnet-private`, or a custom base RPC URL). On 2026-10-20
+everything on upstream `main` through #148 was live for both devnet and mainnet:
+
+| Feature (upstream PR) | Live? | Evidence |
+|---|---|---|
+| eATA `delegation` object on balance endpoints (#135) | ✅ | `/doc` balance response schema |
+| Gasless deposits and withdrawals (#140) | ✅ | `gasless` on `/v1/spl/deposit` and `/v1/spl/withdraw` |
+| Magic ATA routes: private base→ephemeral emits ix `34`; private and public ephemeral→ephemeral with `initIfMissing` emits ix `36` (#127) | ✅ | Devnet builder responses decoded |
+| Wallet-bound auth tokens and `403 TOKEN_IDENTITY_MISMATCH` (#127) | ✅ | `/doc` 403 responses |
+| x402 / MPP merchant checkouts (#143) | ✅ | `/v1/x402/supported` lists `mainnet`, `mainnet-private`, `devnet`, `devnet-private` |
+| `maxDelayMs` cap of 31 days (`2678400000`) for transfers and private swaps (#148) | ✅ | `2678400001` is rejected; `600001` is accepted |
+
+The on-chain program behind the API is older than the API code: neither devnet nor mainnet runs
+#150 yet. See the program table in
+[ephemeral-spl-token.md](ephemeral-spl-token.md#deployment-status).
+
 ## Contents
 
+- [Deployment status](#deployment-status)
 - [Authentication](#authentication)
 - [Typical workflow](#typical-workflow)
 - [Response and submission contract](#common-response-format)
 - [SPL endpoints](#endpoints)
 - [Swap endpoints](#get-v1swapquote)
 - [Queued settlement and confirmation](#queued-settlement-and-confirmation)
+- [Merchant checkouts (x402 / MPP)](#merchant-checkouts-x402--mpp)
 - [MCP endpoint](#mcp-endpoint)
 
 ## Authentication
 
 Endpoints that read private data inside the Private Ephemeral Rollup require a bearer token issued by a wallet challenge/login flow:
 
-1. `GET /v1/spl/challenge?pubkey=<wallet>` — returns a `challenge` string
+1. `GET /v1/spl/challenge?pubkey=<wallet>&cluster=<mainnet-private|devnet-private>` — returns a `challenge` string
 2. The wallet signs the challenge
-3. `POST /v1/spl/login` with `{ pubkey, challenge, signature }` — returns a `token`
+3. `POST /v1/spl/login` with `{ pubkey, challenge, signature, cluster }` — returns a `token`
 4. Pass `Authorization: Bearer <token>` on:
    - `GET /v1/spl/private-balance` (**required**)
    - `POST /v1/spl/stealth-pool` (**required**)
    - `POST /v1/spl/transfer` (**optional** — only when the request needs to connect to the Private Ephemeral Rollup)
+   - `POST /v1/spl/withdraw` (**optional** — when the withdrawal reads a private ER balance)
    - `POST /v1/spl/undelegate-ephemeral-ata` (**optional** — route-dependent when the request uses the Private Ephemeral Rollup)
    - `POST /v1/transaction/send` (**optional** — required when submitting/confirming through an authenticated private ER)
 
-Tokens are scoped to the wallet that signed the challenge.
+The auth service runs only on the TEE validators. Use a `-private` cluster for the challenge, the
+login, and every gated request, and keep the whole flow on that cluster, because tokens are scoped
+per validator. Without a `-private` cluster, `/v1/spl/challenge` returns a challenge prefixed with
+`MOCK:`. That challenge cannot be used for real private reads.
+
+Tokens are bound to the wallet that signed the challenge. `login` issues `{pubkey}.{token}`, and only
+the inner token is forwarded to the ER. Address-scoped endpoints (private balance, shielded-source
+transfer, withdraw, eATA undelegation) reject a token issued for a different wallet with
+`403 TOKEN_IDENTITY_MISMATCH`. Treat the whole token as an opaque bearer string.
 
 ## Typical Workflow
 
@@ -223,6 +254,7 @@ Deposit SPL tokens from Solana into an ephemeral rollup.
 | initAtasIfMissing | boolean | No | Auto-initialize ATAs if missing |
 | idempotent | boolean | No | Per-request selector for the default shuttle deposit builder (`true`) or legacy deposit builder (`false`) |
 | private | boolean | No | Defaults to `true`; add the private eATA permission instruction when enabled |
+| gasless | boolean | No | Defaults to `false`. See [Gasless deposits and withdrawals](#gasless-deposits-and-withdrawals) |
 
 ```json
 {
@@ -294,6 +326,13 @@ Supported routes in the current SDK-backed API are public base→base, public
 ephemeral→ephemeral, and private base→base, base→ephemeral, ephemeral→ephemeral, or
 ephemeral→base. Other combinations return `UNSUPPORTED_TRANSFER_ROUTE`.
 
+Private base→ephemeral builds ix `34`. The recipient travels only in encrypted post-delegation
+actions and is credited in a **Magic ATA** that exists only inside the ER, so the destination never
+appears on base in cleartext. With `initIfMissing`, ephemeral→ephemeral transfers prepend ix `36`
+(`EnsureMagicAtaDestination`) so a recipient without an ER token account can still be funded.
+Zero-amount setup transfers and native SOL stay on the legacy cleartext route. See
+[ephemeral-spl-token.md](ephemeral-spl-token.md#magic-atas).
+
 The live request schema accepts `amount: 0` for specific private base→ephemeral setup/delegation flows;
 do not generalize zero as a meaningful payment amount for other routes. With `exactOut: true`, the
 recipient receives `amount` and the sender pays the platform fee in addition; with `false`, the fee is
@@ -327,6 +366,10 @@ Withdraw SPL tokens from an ephemeral rollup back to Solana.
 | initAtasIfMissing | boolean | No | Auto-initialize ATAs |
 | escrowIndex | integer (>=0) | No | Escrow index |
 | idempotent | boolean | No | Per-request selector for the default shuttle withdrawal builder (`true`) or legacy direct withdrawal builder (`false`) |
+| gasless | boolean | No | Defaults to `false`. See [Gasless deposits and withdrawals](#gasless-deposits-and-withdrawals) |
+
+When the owner's ER balance is held in a Magic ATA, the withdraw builder detects it, skips the eATA
+init/delegate instructions, and closes the Magic ATA after shuttle settlement.
 
 ```json
 {
@@ -336,6 +379,24 @@ Withdraw SPL tokens from an ephemeral rollup back to Solana.
   "idempotent": true
 }
 ```
+
+### Gasless deposits and withdrawals
+
+Add `"gasless": true` to a deposit or withdrawal to make the configured sponsor pay transaction fees
+and instruction payer costs. The response still has `sendTo: "base"` and already carries the
+sponsor's signature, so the owner adds their signature without changing the message or blockhash.
+
+- Supported mints: mainnet and `mainnet-private` USDC or USDT, and devnet and `devnet-private` USDC
+  (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`). Custom clusters and off-curve owners are rejected.
+- `amount` must be at least `500000` (0.5 tokens). A relay fee of `200000` (0.2 tokens) is charged
+  upfront from the owner's **existing base-chain ATA**. Depositing 1 USDC needs 1.2 USDC on base.
+  Withdrawing 1 USDC needs 0.2 USDC on base plus 1 USDC on the ER, because the fee cannot come from
+  the pending withdrawal proceeds.
+- Responses report `fees.tokens: "200000"` and `fees.lamports: "500000"` (sponsor-paid shuttle
+  delegation, or `"0"` with `idempotent: false`). Neither figure includes network fees or rent.
+- On shuttle flows the relay fee is collected when the base transaction succeeds. A later
+  settlement failure does not refund it automatically.
+- If the sponsor is unavailable, the API returns `503`.
 
 ---
 
@@ -357,11 +418,21 @@ Get the base-chain SPL token balance for an address. Reads the owner's ATA on th
   "mint": "<pubkey>",
   "ata": "<pubkey>",
   "location": "base",
-  "balance": "1000000"
+  "balance": "1000000",
+  "delegation": {
+    "status": "delegated",
+    "validator": "MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57",
+    "endpoint": "https://..."
+  }
 }
 ```
 
-`balance` is a base-unit string.
+`balance` is a base-unit string. `delegation` (optional) comes from the base-layer delegation record
+of the owner's eATA. `status` is `delegated` or `undelegated`. `validator` is present when the eATA is
+delegated. `endpoint` appears only when it can be resolved statically (TEE validators), because no
+router call is made. Check `validator` before you send a base-layer payment, so that a recipient on
+another ER is refused or re-routed before funds move. `/v1/spl/private-balance` returns the same
+object.
 
 ---
 
@@ -427,7 +498,7 @@ Build an unsigned swap transaction from a quote.
 | visibility | `"public"` \| `"private"` | No | Defaults to `"public"` |
 | destination | string (pubkey) | If private | Final private-transfer recipient |
 | minDelayMs | string (numeric) | If private | Min delay in ms |
-| maxDelayMs | string (numeric) | If private | Max delay in ms. Must be ≤ 600000 (10 min) |
+| maxDelayMs | string (numeric) | If private | Max delay in ms. Must be ≤ 2678400000 (31 days) |
 | split | integer (1-14) | If private | Number of queue splits |
 | clientRefId | string (numeric) | No | u64 correlation id attached to each split |
 | validator | string (pubkey) | No | Defaults to `MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57` |
@@ -502,6 +573,33 @@ general “final settlement status” endpoint, so applications that promise pay
 this observation and support pending, settled, and refunded/failed states. For splits, reconcile the
 full group total, not only the first credit.
 
+## Merchant Checkouts (x402 / MPP)
+
+The same service sells API access, credits, and products for **already-delegated USDC**, using
+custom MagicBlock payment methods: x402 v2 scheme `exact-magicblock` and MPP method `magicblock` with
+intent `charge`. Stock Solana x402/MPP clients do not understand delegated accounts or ER routing.
+The full contract is in upstream `api/PAYMENTS.md`.
+
+- **Merchant registration:** `POST /v1/merchants/challenge` → wallet signs the message (UTF-8,
+  standard padded base64 signature) → `POST /v1/merchants` returns `merchantId` and an `apiKey`.
+  `POST /v1/merchants/rotate-key` rotates the key. Merchant calls send
+  `Authorization: Bearer <apiKey>` plus `X-Merchant-Id: <wallet>`.
+- **Checkouts:** `POST /v1/payments` creates an order, idempotent per `externalReference`; changed
+  terms return `409 PAYMENT_ORDER_CONFLICT`. Reusable offers use `POST /v1/payment-links` and
+  `POST /v1/payment-links/{merchantId}/{linkId}/checkouts`. The response's `accessToken` authorizes
+  the buyer. Keep it out of URLs and logs.
+- **Pay:** `POST /v1/payments/{id}/prepare` returns one SPL transfer plus a `payment:<id>` memo. The
+  buyer signs and pays the fee, which must be exactly zero. Settle with
+  `POST /v1/payments/{id}/settle`, or through `POST /v1/x402/payments/{id}/pay`
+  (`PAYMENT-SIGNATURE`) or `POST /v1/mpp/payments/{id}/pay` (`Payment-Authorization`).
+  `/v1/x402/supported`, `/verify`, and `/settle` serve merchant middleware.
+- Both buyer and merchant eATAs must already be delegated to the same validator. Checkout performs
+  no deposit, withdrawal, sponsorship, or account creation.
+- `cluster` defaults to `mainnet-private`. Use `devnet-private` explicitly for devnet testing.
+  `paid` means **ER confirmation, not L1 commitment**. Fulfill an order only after
+  `GET /v1/payments/{id}` reports `paid`. A pending result is not a payment, so poll it rather than
+  re-signing.
+
 ## MCP Endpoint
 
 ### POST /mcp
@@ -566,7 +664,7 @@ MCP responses include `result.structuredContent` with the same fields as the RES
 - `mint` defaults to USDC when omitted on deposit
 - `validator` defaults to the ephemeral RPC identity resolved via `getIdentity` when omitted, or to `MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57` for swaps
 - `cluster` accepts `"mainnet"`, `"devnet"`, `"mainnet-private"`, `"devnet-private"`, or a custom `http(s)` base RPC override
-- Private transfers and private swaps support `split` and `minDelayMs`/`maxDelayMs` for timing obfuscation. Transfers allow `split` 1–15; swaps allow 1–14 with `maxDelayMs ≤ 600000` (10 min). These delays control scheduling eligibility, not guaranteed settlement time
+- Private transfers and private swaps support `split` and `minDelayMs`/`maxDelayMs` for timing obfuscation. Transfers allow `split` 1–15; swaps allow 1–14. Both cap `maxDelayMs` at `2678400000` (31 days); the program itself sets no upper bound. These delays control scheduling eligibility, not guaranteed settlement time
 - Set `initIfMissing`, `initAtasIfMissing`, and `initVaultIfMissing` all to `true` for the simplest deposit integration
 - `initIfMissing` initializes an eATA, not the validator-scoped transfer queue; mint initialization is a
   separate endpoint
@@ -575,5 +673,5 @@ MCP responses include `result.structuredContent` with the same fields as the RES
   `undelegateIx` has no mode flag
 - SPL SOL routes use the native WSOL mint `So11111111111111111111111111111111111111112`. The API can wrap a deficient base-source balance, but WSOL token balance and wallet lamports remain distinct; private swaps do not accept `nativeDestinationAccount`
 - Transfer platform fees require `platformFeeAccount`, are charged in the transferred token, and are supported only when `fromBalance` is `"base"`
-- `gasless` transfers require a configured sponsor, an approved stablecoin, and at least 0.5 USDC/USDT; they prepend a 0.2 USDC/USDT relay-fee transfer. Off-curve senders do not receive gasless handling
+- `gasless` transfers, deposits, and withdrawals require a configured sponsor, an approved stablecoin, and at least 0.5 USDC/USDT, and charge a 0.2 USDC/USDT relay fee. Off-curve senders do not get gasless handling on transfers, and deposits and withdrawals reject them
 - Auth: `/v1/spl/private-balance` and `/v1/spl/stealth-pool` always require `Authorization: Bearer <token>`. `/v1/spl/transfer`, `/v1/spl/undelegate-ephemeral-ata`, and `/v1/transaction/send` require it when their route or confirmation uses the Private ER; ordinary public builder routes do not

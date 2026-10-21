@@ -18,19 +18,56 @@ Sources of truth:
    Rust program pins SDK `0.16.2`, its root TS package pins `0.14.3`, and its app pins `0.15.3`; treat
    those as example provenance, not as the dependency snapshot below.
 
-SDK version example, verified 2026-07-22: Rust `ephemeral-rollups-sdk` **0.16.2**
-(TS snapshot remains **0.15.5**; npm latest was **0.16.1**), with Anchor **1.0.2** for modern Anchor
-programs. Preserve an existing target repo's compatible versions unless the
-task explicitly requests an upgrade; see [resources.md](resources.md).
+SDK version example: Rust `ephemeral-rollups-sdk` **0.16.2** (verified 2026-07-22) with Anchor
+**1.0.2** for modern Anchor programs. This file's TypeScript snippets use
+`@magicblock-labs/ephemeral-rollups-sdk` **0.17.3** (npm latest, verified 2026-10-20): Magic ATA
+destinations, the encrypted-destination private base→ephemeral route, and `magicAtaSource`
+withdrawals first shipped in **0.17.1**, so older TS pins build the legacy cleartext routes. Preserve
+an existing target repo's compatible versions unless the task explicitly requests an upgrade; see
+[resources.md](resources.md).
 
 Program ID (all clusters): `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`
 
+## Deployment status
+
+Verified **2026-10-20** against upstream `main` (`5051c28`, tagged `ephemeral-token-program@v0.1.0`
+and `ephemeral-spl-api@v0.1.0`), dumps of the deployed program, and probes of the hosted API.
+Devnet and mainnet use the same program ID. Before you promise that a feature works on a cluster,
+re-check with `solana program show SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2 -u devnet` (and
+`-u mainnet-beta`) and compare the last deploy slot with the merge dates below.
+
+| Cluster | Last deploy | Program source it matches |
+|---|---|---|
+| Devnet | slot `503370250`, 2026-09-24 08:01 UTC | `main` through #144 (2026-09-20), built with the `logging` feature, so it emits `Instruction: …` logs |
+| Mainnet | slot `449971564`, 2026-09-24 08:15 UTC | The same source as devnet, built without `logging` |
+
+The `v0.1.0` release tags do **not** match either deployed binary. They include #150, which neither
+cluster runs.
+
+| Feature (upstream PR) | Devnet | Mainnet |
+|---|---|---|
+| Core balances, PER permissions, shuttles, transfer queues, stealth pools, sponsored SOL, private swap delivery (ix `0`–`32`) | ✅ | ✅ |
+| Group-receipt ACL permissions on queued transfers (#129) | ✅ | ✅ |
+| Magic fee vault account for delegated eATA owners on undelegate (#136) | ✅ | ✅ |
+| `CloseLamportsPda` recovery, ix `33` (#139) | ✅ | ✅ |
+| Magic ATA destinations, ix `34`–`36` (#127); also needs ER validators ≥ `v0.16.0` (all public and TEE ERs report `1.0.2`) | ✅ | ✅ |
+| `ExecuteScheduledPrivateTransfer` (ix `30`) checks that its accounts and data match the instruction stored in its Hydra crank (#150, merged 2026-10-16) | ❌ not deployed | ❌ not deployed |
+
+Hosted API features (`payments.magicblock.app`, one deployment that serves every cluster through
+`cluster`): gasless deposits and withdrawals (#140), eATA `delegation` in balance responses (#135),
+wallet-bound auth tokens (#127), x402/MPP merchant checkouts (#143), and the 31-day `maxDelayMs` cap
+(#148) are all live. On 2026-10-20 the API returned ix `34` for a devnet private base→ephemeral
+transfer and ix `36` plus an SPL transfer for a devnet private ephemeral→ephemeral transfer. See
+[private-payments.md](private-payments.md).
+
 ## Contents
 
+- [Deployment status](#deployment-status)
 - [Integration models](#integration-models)
 - [Model A: SDK lifecycle](#model-a-sdk-lifecycle)
 - [Model B: direct program surface](#model-b-direct-program-surface)
 - [Queued private settlement](#queued-private-settlement)
+- [Magic ATAs](#magic-atas)
 - [Public instruction groups](#public-instruction-groups)
 - [Native SOL and WSOL](#native-sol-and-wsol)
 - [Recovery map](#recovery-map)
@@ -89,7 +126,7 @@ file applies only to Model A.
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3",
     "@solana/spl-token": "^0.4.14"
   }
 }
@@ -158,9 +195,12 @@ const validator = new PublicKey((await res.json()).result.identity);
 ```
 
 The example's devnet tests default to validator
-`mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev` (endpoint
-`https://devnet-as.magicblock.app/`) — treat that as a snapshot and prefer
-resolving via `getIdentity`.
+`mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev`, but on 2026-10-20 `getIdentity` on
+`https://devnet-as.magicblock.app/` returned `MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57`
+(devnet-eu `MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e`, devnet-us
+`MUS3hc9TCw4cGC12vHNoYcCGzJG1txjgQLZWVoeNHNd`, devnet-tee
+`MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo`). Identities change, so always resolve via
+`getIdentity` rather than hard-coding one.
 
 ### Deposit + Delegate (base layer)
 
@@ -204,18 +244,34 @@ const erBalance = (await getAccount(erConnection, ata)).amount;
 
 For ephemeral→ephemeral public transfers this builds a plain SPL transfer
 between the canonical ATAs — which is why an app program can do the same via
-CPI (next section). The current helper supports public base→base and
-ephemeral→ephemeral routes. Cross-layer routes are private queued workflows;
-do not assume a public base→ephemeral or ephemeral→base route exists. The SDK helper throws an ordinary
+CPI (next section). Routes in `transferSpl` (TS SDK 0.17.3):
+
+| Visibility | From → To | What the helper builds | Submit to |
+|---|---|---|---|
+| public | base → base | Plain SPL transfer | Base |
+| public | ephemeral → ephemeral | Plain SPL transfer; with `initIfMissing`, prepends `EnsureMagicAtaDestination` (ix `36`) so a missing destination is created as a Magic ATA | ER |
+| private | ephemeral → ephemeral | Same as public: ix `36` (with `initIfMissing`) + SPL transfer | ER |
+| private | base → base | Delegated shuttle with merge + queued private transfer (ix `25`) | Base |
+| private | base → ephemeral | **Default:** `DepositAndDelegateShuttleWithMergeToEncryptedDestination` (ix `34`); the destination stays encrypted and is created as a Magic ATA on the ER. `legacyCleartextDestination: true` builds the old ix `24` route, which sets up the destination eATA on base in cleartext | Base |
+| private | ephemeral → base | `DepositAndQueueTransfer` (ix `16`) into the `[mint, validator]` queue; `validator` is required | ER |
+
+Public base→ephemeral and public ephemeral→base do not exist. The SDK helper throws an ordinary
 `Error` for an unsupported combination; `UNSUPPORTED_TRANSFER_ROUTE` is an HTTP Payments API error code,
 not an SDK guarantee. Private variants use
-`privateTransfer: { minDelayMs, maxDelayMs, split }`.
+`privateTransfer: { minDelayMs, maxDelayMs, split, exactOut, clientRefId }`. The program sets no
+maximum delay; the hosted API caps `maxDelayMs` at 31 days.
 
 ### Withdrawal Paths
 
 The default `withdrawSpl(...)` builder uses the delegated-shuttle withdrawal path. Submit those
 instructions on base; the helper builds the shuttle orchestration and does not require a preceding
 `undelegateIx` call.
+
+If the ER balance sits in a **Magic ATA** (funded by ix `34`/`36`, with no eATA behind it yet), pass
+`magicAtaSource: true`. The helper then skips the eATA init/delegate instructions and drains the
+Magic ATA through the shuttle, and the validator closes the Magic ATA once it is empty. Detect this
+case by running `isMagicAtaTokenAccount(accountInfo.data)` on the ER account. `magicAtaSource` works
+only with the default shuttle builder, and combining it with `idempotent: false` throws.
 
 Use the legacy path when the application explicitly needs the direct eATA lifecycle shown below:
 
@@ -388,11 +444,46 @@ UIs need pending, settled, and refunded/failed states plus a reconciliation path
 For multi-split payments, do not mark the group settled after the first credit. Correlate every split
 with its group/client reference and reconcile the total amount.
 
+`DepositAndQueueTransfer` (ix `16`) also accepts an optional permission-account pair for the group
+receipt (#129). Pass both accounts or neither, because a partial pair fails early. The SDK and API
+builders wire it for you. Older receipt layouts that lack the pair still work.
+
+## Magic ATAs
+
+A Magic ATA is a token account at the owner's **canonical ATA address** that exists only inside the
+ER. The validator creates it through the Magic program (`CreateMagicAta`) before any base-layer
+state exists, and marks it by setting `close_authority` to the rent sysvar
+(`MAGIC_ATA_CLOSE_AUTHORITY`). Because of this, a private transfer can fund a recipient who has no
+delegated eATA without the recipient ever appearing on base in cleartext.
+
+- **ix `34` `DepositAndDelegateShuttleWithMergeToEncryptedDestination`** (base): shuttle
+  setup, deposit, and delegate, with the destination owner and ATA carried only as encrypted
+  post-delegation actions (80-byte ciphertexts each). On the ER, the first action runs ix `35`, and
+  the second undelegates and closes the shuttle. On top of the standard sponsored-shuttle setup
+  fee, it charges an extra flat 1,539,280 lamports for the ER-side Magic ATA creation and merge
+  (0 when the program is built with `no-fees`).
+- **ix `35` `MergeShuttleIntoMagicAta`** (ER only): fired as ix `34`'s decrypted action, never called
+  directly. It idempotently creates the destination Magic ATA, then moves the whole shuttle wallet
+  ATA balance into it.
+- **ix `36` `EnsureMagicAtaDestination`** (ER only, no data): idempotently creates the destination
+  as a Magic ATA, so a plain SPL transfer later in the same ER transaction can fund it.
+
+A funded Magic ATA takes precedence over a base delegation of the same ATA, and the two merge only
+after the Magic ATA has been drained through the shuttle. Read balances with
+`getAccount(erConnection, ata)` as usual. Use `isMagicAtaTokenAccount` to tell the two apart before
+choosing a withdrawal builder. TS helpers: `magicAtaAddress`, `createMagicAtaInstruction`,
+`closeMagicAtaInstruction`, `isMagicAtaTokenAccount`, `ensureMagicAtaDestinationIx`, and
+`depositAndDelegateShuttleWithMergeToEncryptedDestinationIx`. The ER validator must support Magic
+ATA materialization (magicblock-validator ≥ `v0.16.0`). If it does not, use
+`legacyCleartextDestination: true`.
+
 ### Rust CPI via `ephemeral-spl-api`
 
 Depend on the upstream API crate — `ephemeral-spl-api`, in the `e-token-api/`
-directory of the program repo (unpublished; use a git dependency). The
-on-chain program is Pinocchio-based, but the API crate is framework-agnostic.
+directory of the program repo. It is not on crates.io, so use a git dependency pinned to a tag
+(`tag = "ephemeral-spl-api@v0.1.0"`, released 2026-10-20) or to a rev. The `v0.1.0` API matches the
+deployed instruction layouts, because #150 changed checks only, not layouts. The on-chain program
+is Pinocchio-based, but the API crate is framework-agnostic.
 Use its exports instead of copying bytes:
 
 - Program ID: `ephemeral_spl_api::ID`; delegation program:
@@ -402,7 +493,8 @@ Use its exports instead of copying bytes:
   argument payloads.
 - Args: `ephemeral_spl_api::instructions::{DepositArgs, WithdrawArgs,
   DelegateArgs, InitializeTransferQueueArgs, DepositAndQueueTransferArgs,
-  AmountAndSaltArgs, ...}` (encoded via `wheels::layout::Encodable`).
+  AmountAndSaltArgs, DepositAndDelegateShuttleWithMergeToEncryptedDestinationArgs, ...}`
+  (encoded via `wheels::layout::Encodable`).
 - State + PDAs: `state::ephemeral_ata::EphemeralAta` (`find_pda(owner, mint)`,
   `seeds`, `signer_seeds`), `state::global_vault::GlobalVault`
   (`find_pda(mint)`), `state::transfer_queue::TransferQueue`.
@@ -432,6 +524,12 @@ Verify against `e-token/tests/` when wiring; `(w)` = writable, `(s)` = signer.
 | `DelegateEphemeralAta` | payer (s), eATA (w), owner program, delegation buffer (w), delegation record (w), delegation metadata (w), delegation program, system program |
 | `CloseEphemeralAta` | owner (s), eATA (w), rent destination (w) |
 
+`UndelegateEphemeralAta` (ix `5`) accepts an optional sixth account: the executing validator's
+magic fee vault (writable). Pass it only when a program drives the undelegation through CPI and the
+eATA owner is itself a delegated account (#136). The program requires that account to be owned by
+the delegation program, and rejects a seventh account or a read-only vault. Wallet-signed REST/SDK
+undelegations omit it.
+
 The program exposes a much larger surface (shuttle flows, transfer queues,
 sponsored lamports transfers, stealth pools, scheduled private transfers) —
 consult the upstream repo's README and `e-token/tests/` for those. Never call
@@ -450,6 +548,7 @@ The SDK also exposes Model B client-side, mirroring the raw instructions
 - Instructions: `initEphemeralAtaIx`, `initVaultIx`, `initVaultAtaIx`,
   `initRentPdaIx`, `depositSplTokensIx`, `delegateEphemeralAtaIx`,
   `withdrawSplIx`, `undelegateIx`, `mergeShuttleIntoAtaIx`,
+  `depositAndDelegateShuttleWithMergeToEncryptedDestinationIx`, `ensureMagicAtaDestinationIx`,
   `lamportsDelegatedTransferIx` (see [lamports-topup.md](lamports-topup.md)),
   and eATA permission builders (`createEataPermissionIx`,
   `delegateEataPermissionIx`, `resetEataPermissionIx`,
@@ -460,7 +559,9 @@ The SDK also exposes Model B client-side, mirroring the raw instructions
 
 The checked-in IDL or an old copied discriminator list can lag the program. Use the current
 `ephemeral-spl-api::instruction::ESplInstruction` enum and current tests. The present public surface is
-grouped as follows (discriminator `18` is unused; `196` and `201+` are internal callbacks/actions):
+grouped as follows (discriminator `18` is unused; `196` and `201+` are internal callbacks/actions;
+the public range ends at `36`). Every public instruction is deployed on devnet and mainnet. See
+[Deployment status](#deployment-status).
 
 | Group | Instructions | Typical use |
 |---|---|---|
@@ -468,9 +569,12 @@ grouped as follows (discriminator `18` is unused; `196` and `201+` are internal 
 | PER permissions | `6`–`9` | Create, delegate, undelegate, or reset an eATA permission |
 | Shuttle lifecycle | `11`, `13`–`15`, `24`–`26`, `32` | Single-use accounts for cross-layer deposit/merge/withdraw and permissionless recovery |
 | Transfer queues | `12`, `16`, `17`, `19`, `27`, `28` | Initialize/delegate/grow/refill a queue and enqueue delayed transfers |
-| Sponsored SOL | `20`, `23` | Fund delegated destinations and initialize the rent sponsor |
+| Sponsored SOL | `20`, `23`, `33` | Fund delegated destinations, initialize the rent sponsor, and recover a stranded lamports PDA |
 | Stealth pools | `21`, `22` | Ensure/delegate a pool and update its ER-local destination set |
 | Private swap delivery | `29`–`31` | Schedule, execute, and clean up stash-based private transfer delivery |
+| Magic ATA destinations | `34`–`36` | Encrypted-destination private base→ephemeral transfer; ER-side Magic ATA creation (see [Magic ATAs](#magic-atas)) |
+
+`35` and `36` execute only on the ER. `35` runs only as ix `34`'s post-delegation action.
 
 High-level SDK/API helpers are the default because these instructions have exact ordered accounts,
 encryption payloads, PDAs, and callback assumptions. Direct CPI is appropriate only when the product
@@ -504,6 +608,8 @@ same balance, and do not promise direct native delivery without checking route e
 | Shuttle already undelegated but funds/accounts remain | Base ownership plus nonzero shuttle eATA or wallet ATA | Public instruction `32` permissionlessly settles both balances to an owner-controlled token account and closes the shuttle accounts |
 | Queue item scheduled but destination not credited | Missing payout callback/destination delta; queue item may already be gone | Follow group/client reference, callback logs, and automatic refund path; escalate after retry exhaustion |
 | Scheduled private-swap stash times out | Stash/stash ATA still funded; timeout callback result | Current instruction `30` refunds stash ATA balance to the user's ATA after timeout; reconcile cleanup via `31` |
+| Sponsored lamports transfer stranded (post-delegation actions failed, PDA rescue-undelegated with the principal inside) | Lamports PDA `[b"lamports", payer, destination, salt]` is program-owned on base and holds more than rent | Permissionless ix `33` `CloseLamportsPda` (base only, data = `salt`) refunds the excess to the payer, returns rent to the rent PDA, and closes the PDA. A still-delegated PDA is rejected |
+| Balance sits in a Magic ATA, not an eATA | `isMagicAtaTokenAccount` is true on the ER account | Withdraw with `withdrawSpl(..., { magicAtaSource: true })` (shuttle builder), not the legacy eATA path |
 | eATA undelegated but withdrawal fails | Base owner restored; vault and destination balances unchanged | After confirming the commit, retry the legacy direct withdrawal with `idempotent: false` |
 | Rent/fee sponsor depleted | Rent PDA or fee vault balance and failed action logs | Refill through the documented sponsor path, then retry only an idempotent operation |
 
@@ -514,6 +620,8 @@ receipts close after all callbacks, so they are execution coordination—not dur
 
 ## Implementation checklist
 
+- **Check [Deployment status](#deployment-status) for the target cluster** before relying on a
+  feature merged after the last deploy, and re-verify the deploy slot if the table is old.
 - **Pin the same `validator` across a flow** — one ER transaction can only
   write accounts delegated to its own validator, and the transfer queue is
   scoped per `[mint, validator]`. Resolve it once via `getIdentity` on the ER
