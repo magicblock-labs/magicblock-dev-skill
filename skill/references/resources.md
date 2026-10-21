@@ -86,7 +86,8 @@ Example provenance verified in the `magicblock-engine-examples` working tree on 
 These are working-example snapshots, not one mutually compatible version recommendation. The
 crates.io latest was `0.16.2` on **2026-07-22** and the Rust snippets in this skill use that
 verified snapshot; the npm latest was `0.16.1`, and the TypeScript snippets remain on the
-separately verified `0.15.5` snapshot. Preserve a target repo's version line unless upgrading it
+separately verified `0.15.5` snapshot, except the Ephemeral SPL Token reference, which uses `0.17.3`
+(npm latest on **2026-10-20**; its Magic ATA helpers need ≥ `0.17.1`). Preserve a target repo's version line unless upgrading it
 explicitly.
 
 ## Key Program IDs

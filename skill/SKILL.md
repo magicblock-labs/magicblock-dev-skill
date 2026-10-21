@@ -64,7 +64,10 @@ sponsorship, cost-estimation, or fee-payer funding questions.
 `delegateSpl`/`transferSpl`/`undelegateIx`/`withdrawSpl`, and the ER balance appears as a normal SPL token
 account at the owner's canonical ATA address, so Anchor programs can use plain SPL Token CPI. In the
 direct-program model, contracts use `ephemeral-spl-api` and explicitly work with the eATA/global-vault
-PDAs; do not apply the canonical-ATA model to that raw surface.
+PDAs; do not apply the canonical-ATA model to that raw surface. Private base→ephemeral transfers now
+credit an ER-only **Magic ATA** (TS SDK ≥ 0.17.1). Before you promise that an eSPL feature works on
+a cluster, check the devnet/mainnet deployment table in
+[ephemeral-spl-token.md](references/ephemeral-spl-token.md#deployment-status).
 
 **Pricing Oracle** republishes supported market feeds for Solana/ER consumers. A safe integration
 verifies the expected feed identity, upstream publish-time freshness, value domain, exponent, checked
@@ -233,13 +236,13 @@ When you implement changes, provide:
 - Ephemeral Accounts (ER-only temporary state): [ephemeral-accounts.md](references/ephemeral-accounts.md)
 - Magic Actions (post-commit base-layer instructions): [magic-actions.md](references/magic-actions.md)
 - Topping up a delegated account with lamports: [lamports-topup.md](references/lamports-topup.md)
-- Ephemeral SPL Token lifecycle (deposit, transfer, app-program CPI, undelegate, withdraw): [ephemeral-spl-token.md](references/ephemeral-spl-token.md)
+- Ephemeral SPL Token lifecycle (deposit, transfer, app-program CPI, undelegate, withdraw, Magic ATAs, devnet/mainnet deployment status): [ephemeral-spl-token.md](references/ephemeral-spl-token.md)
 - TypeScript frontend setup: [typescript-setup.md](references/typescript-setup.md)
 - Cranks (scheduled tasks): [cranks.md](references/cranks.md)
 - VRF (randomness): [vrf.md](references/vrf.md)
 - Pricing Oracle (feed identity, freshness, and safe consumption): [pricing-oracle.md](references/pricing-oracle.md)
 - Session Keys (scoped temporary authority): [session-keys.md](references/session-keys.md)
-- Private Payments API: [private-payments.md](references/private-payments.md)
+- Private Payments API (incl. gasless, x402/MPP merchant checkouts, live-feature status): [private-payments.md](references/private-payments.md)
 - Local development and environment-specific validation: [local-development.md](references/local-development.md)
 - Reference links & versions: [resources.md](references/resources.md)
 
