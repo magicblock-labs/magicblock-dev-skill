@@ -35,8 +35,8 @@ Magic Actions, which run on the base layer.
 
 **Delegation debugging invariant**: a properly delegated account looks owned by
 the delegation program on base, owned by the original program on the ER endpoint
-returned by router `getDelegationStatus`, and cloned into the ER with
-`delegated=true`.
+returned by router `getDelegationStatus`, and reported `isDelegated: true` by
+`getDelegationStatus` sent to that ER endpoint itself.
 
 For the verified SDK v0.16.2 snapshot, use **MagicIntentBundleBuilder** to
 schedule commit and commit-and-undelegate intents. Do not use the deprecated
@@ -178,7 +178,9 @@ For each implementation, record:
 
 For security-sensitive designs, reviews, and implementations, read [security.md](references/security.md). Separate
 protocol guarantees from required integration validation, application policy, and ordinary Solana
-security. Do not present an application recommendation as a MagicBlock protocol guarantee.
+security. Do not present an application recommendation as a MagicBlock protocol guarantee. In a
+review, report each finding with its runtime, product state, label, source, consequence, and test,
+using the template in [security.md#review-output](references/security.md#review-output).
 
 ### 4. Debug live delegation/routing failures
 

@@ -43,14 +43,15 @@ pub struct CreateTemporary<'info> {
 The sponsor pays `32 lamports` per allocated byte, with a `60-byte` overhead per Ephemeral Account in
 the current documented model. Verify current pricing before production sizing.
 
-Generated helpers cover four lifecycle operations:
+The macro generates four lifecycle helpers on the context, named after each `eph` field (for the
+example above, `ctx.accounts.create_ephemeral_temporary(len)`):
 
-| Operation | Use |
+| Helper | Use |
 |---|---|
-| Create | Allocate a new ER-only account of an explicit length |
-| Init if needed | Reuse or initialize an account when the flow is intentionally idempotent |
-| Resize | Add or remove capacity as the temporary state grows or shrinks |
-| Close | Delete it and return remaining sponsored rent according to the close flow |
+| `create_ephemeral_<field>(data_len)` | Allocate a new ER-only account of an explicit length |
+| `init_if_needed_ephemeral_<field>(data_len)` | Create only when the current data length is zero (it does not check ownership or contents) |
+| `resize_ephemeral_<field>(new_data_len)` | Add or remove capacity; the sponsor pays or receives the rent difference |
+| `close_ephemeral_<field>()` | Delete it and refund the remaining sponsored rent to the sponsor |
 
 Creation allocates bytes; the application is still responsible for writing a valid discriminator and
 serialized data. Do not assume allocation automatically initializes an Anchor account value.

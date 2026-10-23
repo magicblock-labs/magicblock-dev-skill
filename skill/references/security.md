@@ -4,6 +4,21 @@ Use this guide for security reviews, architecture decisions, and implementation 
 more MagicBlock products. Pair it with the relevant product guide and with a general Solana security
 review. This file covers only MagicBlock-specific boundaries.
 
+## Review output
+
+Write every finding or recommendation in this shape, one row or block per finding:
+
+| Field | What to write |
+| --- | --- |
+| Runtime | base, public ER, or PER |
+| Product and state | the product and lifecycle state (for example, "VRF, callback pending") |
+| Label | exactly one of: protocol guarantee, integration validation, application policy, general Solana practice (see [Source standard](#source-standard)) |
+| Source | the pinned source or documentation page; if none exists, write "inference" or "application policy" |
+| Consequence | what goes wrong if the check is missing |
+| Test | the test that demonstrates the expected behavior |
+
+Label each finding in the output itself; do not only classify it while reasoning.
+
 ## Source standard
 
 Classify every security statement before presenting it:
@@ -195,14 +210,3 @@ Sources: [enqueue transfer](https://github.com/magicblock-labs/ephemeral-spl-tok
 
 Sources: [Magic Program fee handling](https://github.com/magicblock-labs/magicblock-validator/blob/cec4cf574ace267029e9487b61780d5218256b42/programs/magicblock/src/schedule_transactions/mod.rs) and
 [MagicBlock security audits](https://docs.magicblock.gg/pages/overview/additional-information/security-and-audits).
-
-## Review output
-
-For every finding or recommendation, report:
-
-- the affected runtime: base, public ER, or PER;
-- the relevant product and lifecycle state;
-- its classification: protocol guarantee, integration validation, application policy, or general
-  Solana practice;
-- the exact pinned source or documentation page;
-- the failure consequence and the test that demonstrates the expected behavior.

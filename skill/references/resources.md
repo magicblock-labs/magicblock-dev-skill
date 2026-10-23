@@ -20,12 +20,14 @@ EPHEMERAL_WS_ENDPOINT=wss://devnet-as.magicblock.app/
 ## Status JSON API
 
 - Source of truth: `https://status.magicblock.app/api/services`
-- JSON path: `.environments[network].regions[region].servers[fqdn]`
+- JSON path: `.environments[network].regions[region].servers[fqdn]`. Status is per server: there is
+  no top-level `live_status` or `metrics`.
 - Network keys: `mainnet`, `devnet`
 - Region keys: `asia`, `europe`, `usa`, `tee`
 - Service IDs: `er`, `rpc_router`, `pricing_oracle`, `vrf_oracle`
-- Live state: `.live_status[service]` (`true` = Operational, `false` = Down, missing = N/A)
-- Downtime history: `.metrics[service]` minutes per day aligned with `.meta.days` in UTC
+- Live state: `<server>.live_status[service]` (`true` = Operational, `false` = Down, missing = N/A)
+- Downtime history: `<server>.metrics[service]` minutes per day aligned with the top-level
+  `.meta.days` in UTC
 
 Current FQDNs are discoverable from the API. Common entries:
 
@@ -43,8 +45,16 @@ Current FQDNs are discoverable from the API. Common entries:
 Example:
 
 ```bash
+# One server: {"er":true,"rpc_router":true,...}
 curl -sS https://status.magicblock.app/api/services \
-  | jq '.environments.mainnet.regions.asia.servers["as.magicblock.app"].live_status'
+  | jq '.environments.mainnet.regions.europe.servers["eu.magicblock.app"].live_status'
+
+# Every service reported Down, across all networks, regions, and servers
+curl -sS https://status.magicblock.app/api/services | jq -r '
+  .environments | to_entries[] | .key as $net | .value.regions | to_entries[]
+  | .key as $region | .value.servers | to_entries[] | .key as $fqdn
+  | .value.live_status | to_entries[] | select(.value == false)
+  | "\($net) \($region) \($fqdn) \(.key) down"'
 ```
 
 ## Version Policy

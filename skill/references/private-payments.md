@@ -573,6 +573,11 @@ general “final settlement status” endpoint, so applications that promise pay
 this observation and support pending, settled, and refunded/failed states. For splits, reconcile the
 full group total, not only the first credit.
 
+When settlement takes longer than the configured delay, keep the payment `pending`, keep reconciling
+by `clientRefId`, and escalate with the source signature, `clientRefId`, and observed balances after an
+application-chosen deadline. Do not resend the payment or mark it failed until the refund/recovery
+evidence says so; a resend can pay twice.
+
 ## Merchant Checkouts (x402 / MPP)
 
 The same service sells API access, credits, and products for **already-delegated USDC**, using

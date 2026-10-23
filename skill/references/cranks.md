@@ -81,12 +81,17 @@ inner instruction also executes in that ER.
   cancel a task. Do not generalize permissionless behavior from a product-specific queue crank to every
   scheduled task.
 - The task authority signs schedule/reschedule and cancel. Scheduled execution does not reuse that
-  signature. Instead, the scheduler derives `crank_signer_pda(task_authority)` and supplies it to the
-  target handler.
+  signature. The only signer a scheduled instruction can carry is the crank signer PDA,
+  `magicblock_magic_program_api::pda::crank_signer_pda(&task_authority)`: seeds
+  `[b"crank-executor", task_authority]` under `CRANK_PROGRAM_ID`.
+- The scheduler signs for that PDA only when the program lists it. Add
+  `AccountMeta::new_readonly(crank_signer_pda(&authority), true)` to the scheduled inner instruction's
+  accounts, then validate it in the target handler, for example
+  `#[account(address = crank_signer_pda(&state.authority))] pub crank_signer: Signer<'info>`. Without
+  that account and check, the scheduled handler is permissionless: anyone can call it directly.
 - In every scheduled inner instruction, only that derived crank signer may have `is_signer = true`,
   and its meta must be read-only. The scheduler rejects other inner signer metas and rejects a writable
-  crank-signer meta when the task is scheduled. Validate the derived key in the target handler before
-  accepting crank-only authority.
+  crank-signer meta when the task is scheduled.
 - If a PDA is the task authority, invoke schedule/cancel with its signer seeds and test that authority
   separately from the derived read-only signer used by the scheduled handler.
 - Do not expose an instruction that lets an arbitrary caller schedule arbitrary program instructions.
@@ -125,6 +130,7 @@ Test:
 - duplicate/reschedule under the same ID and authority, including request acceptance before apply;
 - task-ID collision from another authority, plus later rejection/no-op of unauthorized reschedule and cancel;
 - authorized cancel, observed scheduler removal, and absence of later mutations;
+- a direct call to the scheduled handler without the crank signer PDA, which must fail;
 - callback instruction failure and subsequent behavior;
 - duplicate execution/idempotency;
 - late execution and terminal state;
