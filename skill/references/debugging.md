@@ -87,9 +87,13 @@ For a properly delegated account, expect this cross-chain shape:
   delegation record whose `owner` is the original program.
 - On the ER RPC returned in `fqdn`, `getAccountInfo` shows the account owned by
   the original program, not by the delegation program.
-- The first clone/update that brings the account into the ER must carry
-  `delegated=true`. If the ER clone arrives as non-delegated, later writable use
-  can fail even though the router still reports the account delegated.
+- The ER's own clone is marked delegated. Observe this by sending the same
+  `getDelegationStatus` request to the ER RPC in `fqdn` (not the router): it
+  returns only `{"isDelegated": true | false}`, read from the ER's local copy.
+  The ER sets the original owner even on a clone delegated to another
+  validator, so ER ownership alone does not prove this. If the router says
+  delegated but the ER says `isDelegated: false`, the ER cloned the account as
+  non-delegated (wrong ER, or a stale clone) and writable use there fails.
 
 Base ownership by the delegation program is expected. Investigate a mismatch when the router reports
 delegation but the selected ER endpoint lacks a delegated, mutable clone.
@@ -106,11 +110,14 @@ delegation but the selected ER endpoint lacks a delegated, mutable clone.
    solana --url https://rpc.magicblock.app/devnet account "$ACCOUNT" --output json
    ```
 
-4. Query the account on the ER endpoint returned by the router:
+4. Query the account and its ER-side delegation flag on the ER endpoint returned by the router:
 
    ```bash
    ER_RPC="<result.fqdn from getDelegationStatus>"
    solana --url "$ER_RPC" account "$ACCOUNT" --output json
+   curl -sS "$ER_RPC" \
+     --header "Content-Type: application/json" \
+     --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getDelegationStatus\",\"params\":[\"$ACCOUNT\"]}"
    ```
 
 5. If the question is about failed ER transactions, inspect recent ER activity

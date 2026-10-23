@@ -500,6 +500,11 @@ require_keys_eq!(
 );
 ```
 
+If the program pins the validator when it delegates
+(`DelegateConfig { validator: Some(<validator>), .. }`) and stores that key, derive the vault from the
+stored key instead. Both give the same PDA; the delegation record is the source of truth when the
+validator is not pinned.
+
 #### Wiring the fee vault into the intent bundle
 
 The builder exposes `.magic_fee_vault(...)` for this. Pair it with
