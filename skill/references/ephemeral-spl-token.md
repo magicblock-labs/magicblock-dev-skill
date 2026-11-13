@@ -461,8 +461,10 @@ API adds the pair. TS SDK 0.17.3 `depositAndQueueTransferIx` builds the 12-accou
 2026-11-13), a failed delivery of a transfer queued without the pair cannot refund: its callback still
 marks the missing permission writable, the ER rejects it (`InvalidWritableAccount`), and the refund is
 rolled back. #158 records `QUEUED_TRANSFER_FLAG_NO_RECEIPT_PERMISSION` on such transfers and gives them
-a 13-account callback that refunds. Until the target cluster runs #158, route SDK-built
-ephemeral→base transfers through the API, or confirm every recipient already has a base token account.
+a 13-account callback that refunds. Until the target cluster runs #158, route queued ephemeral→base
+transfers through the Payments API. Checking beforehand that every recipient has a base token account
+does not make the SDK path safe: the recipient can close or freeze that account after the transfer is
+queued, and the failed delivery's refund is still rolled back.
 
 Who creates the recipient's base token account (#157):
 
@@ -700,7 +702,8 @@ receipts close after all callbacks, so they are execution coordination—not dur
 - **Queue removal is not payout completion** — a ready item is popped when its action is scheduled.
   Reconcile with receipts, destination state, callbacks, and refunds.
 - **Ephemeral→base recipients need a base token account** — the direct route never creates one. On a
-  cluster without #158, prefer the Payments API for SDK-built ephemeral→base transfers.
+  cluster without #158, use the Payments API for queued ephemeral→base transfers; a pre-check of the
+  recipient's account is not a substitute, because it can be closed or frozen before delivery.
 - **Do not mix models** — an app program in Model A should never derive eATA or
   vault PDAs; a Model B contract must not assume canonical-ATA balances exist
   on base layer.

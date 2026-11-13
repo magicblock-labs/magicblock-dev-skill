@@ -7,8 +7,20 @@ An AI development skill for planning, implementing, and debugging MagicBlock app
 ### Quick install
 
 ```bash
-npx add-skill https://github.com/magicblock-labs/magicblock-dev-skill
+npx skills add magicblock-labs/magicblock-dev-skill
 ```
+
+This uses the [`skills`](https://github.com/vercel-labs/skills) CLI, which installs into the current
+project by default; add `-g` to install for every project, or `-a claude-code` (or another agent) to
+pick the agent. The CLI sends anonymous install telemetry, which feeds the install count on
+[skills.sh](https://skills.sh/magicblock-labs/magicblock-dev-skill/magicblock); set
+`DISABLE_TELEMETRY=1` to opt out. `npx add-skill` is the CLI's old, deprecated name.
+
+### Prebuilt artifacts
+
+Each [GitHub release](https://github.com/magicblock-labs/magicblock-dev-skill/releases) attaches the
+built single-file artifacts (`AGENTS.md`, Cursor rules, `system-prompt.md`) and `magicblock.zip` for
+Claude.ai upload, so you can use the skill without cloning or building.
 
 ### Manual install
 
@@ -110,6 +122,9 @@ Bump once per PR, not once per commit. README-only changes do not require a bump
 If another version lands first, update the PR's version against the new base.
 Update `skill/VERSION` manually and run `./build.sh` to rebuild the artifacts.
 
+If you installed with the `skills` CLI, run `npx skills check` to see whether a newer version is
+available and `npx skills update magicblock` to update it.
+
 To update a manual installation to the latest version on `main`, start from a clean clone:
 
 ```bash
@@ -148,17 +163,20 @@ options. With both installed, agents use `solana-dev` for base-layer work and th
 - Delegating/undelegating Solana accounts
 - Post-delegation actions executed on the ER, including encrypted private inputs
 - High-performance, low-latency transaction flows
-- Crank scheduling (recurring automated transactions)
-- VRF (Verifiable Random Function) for provable randomness
+- Crank scheduling (recurring automated transactions), including Hydra cranks and the validator 2.0
+  scheduler changes
+- VRF (Verifiable Random Function) for provable randomness, with scoped callback identities
 - Magic Actions — base-layer instructions chained to an ER commit
 - Topping up delegated accounts with lamports via `lamportsDelegatedTransferIx`
 - ER fees across delegation deposits, refunds, commit limits, `magic_fee_vault`, Magic Actions, and
   validator claims
-- Ephemeral SPL Token lifecycle: deposit, transfer, app-program CPI, undelegate, withdraw
+- Ephemeral SPL Token lifecycle: deposit, transfer, app-program CPI, undelegate, withdraw, Magic ATAs,
+  and per-cluster deployment status
 - Dual-connection architecture (base layer + ephemeral rollup)
 - Gaming and real-time app development on Solana
 - Private payments (deposits, transfers, withdrawals, and swaps via the Payments API, with wallet challenge/login bearer auth for private reads and protected Private-ER routes)
-- Local development and environment-specific validation
+- Local development and environment-specific validation, including fast in-process ER tests with
+  `magicsvm`
 - Cross-product composition patterns and their security/settlement boundaries
 - Source-backed MagicBlock security guidance that separates protocol guarantees, integration checks,
   application policy, and general Solana security
