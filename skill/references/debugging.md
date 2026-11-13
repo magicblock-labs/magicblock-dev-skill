@@ -75,6 +75,20 @@ Interpretation:
 - `isDelegated: true`: `fqdn` is the ER RPC endpoint to use for that account.
   `delegationRecord.authority` is the validator identity. `delegationRecord.owner`
   is the account's original owner program before delegation.
+- JSON-RPC error `-32604` `account has been delegated to unknown ER node: <identity>`: the account
+  is delegated, but its `authority` is not a validator the router knows. The account may be
+  delegated to another operator's validator, to a localnet identity, or to an identity that is not
+  a validator at all. Inspect the base-layer delegation record before retrying.
+
+Two more router-only methods help with routing questions (verified on the devnet router,
+2026-11-13):
+
+- `getRoutes` (no params) lists the validators the router knows, each with `identity`, `fqdn`,
+  `baseFee`, `blockTimeMs`, and `countryCode`.
+- `getBlockhashForAccounts` (params: one array of pubkeys) returns a `blockhash` and
+  `lastValidBlockHeight` from the ER that holds those accounts. It fails with `-32604`
+  `transaction contains accounts that were delegated to different ER nodes` when the accounts are
+  split across validators, which one transaction cannot use.
 
 ## Healthy Delegation Shape
 
@@ -138,6 +152,11 @@ delegation but the selected ER endpoint lacks a delegated, mutable clone.
      --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTransaction\",\"params\":[\"$SIG\",{\"encoding\":\"json\",\"maxSupportedTransactionVersion\":0}]}"
    ```
 
+   `maxSupportedTransactionVersion: 0` is enough for ER transactions. Base-layer settlement
+   transactions sent by the validator are v1 transactions (devnet and mainnet, checked 2026-11-13),
+   so fetch those from the base RPC with `"maxSupportedTransactionVersion":1`; with `0` the RPC
+   answers `Transaction version (1) is not supported by the requesting client`.
+
 6. Read `meta.err`, the failing instruction index, and `logMessages` before
    reading code. For custom program errors, map the numeric error into the local
    error enum first.
@@ -166,6 +185,12 @@ delegation but the selected ER endpoint lacks a delegated, mutable clone.
 - Router 504 on `getDelegationStatus`: this may be a router backend
   accept/connect problem below the JSON-RPC method handler. Check router
   liveness and logs before assuming the method implementation is broken.
+- Commit or undelegate rejected while scheduling: check the log for
+  `is too large to be committed` (account data over 10,240 bytes), a Magic ATA rejection, or custom
+  errors `0xA0000000`–`0xA0000002`. See the
+  [fees failure map](fees-and-commit-economics.md#failure-map).
+- Undelegation fails or hangs and the ER cannot run `commit_and_undelegate`: see the base-layer
+  request and timeout rollback in [delegation.md](delegation.md#exit-paths-and-recovery).
 
 ## Reference Repos
 

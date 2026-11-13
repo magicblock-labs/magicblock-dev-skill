@@ -174,14 +174,15 @@ assumptions the lower layer cannot exercise.
 
 | Environment | Use for | Do not assume it proves |
 | --- | --- | --- |
-| Program unit tests or MagicSVM | Deterministic instruction, account, delegation-model, and clock tests when the project has a verified setup | Router placement, live validators, VRF oracle, PER/TEE behavior, or deployed service integration |
+| Program unit tests or MagicSVM | Deterministic instruction, account, and clock tests; with MagicSVM `0.2.1`, the ER lifecycle too (delegate, commit, undelegate, intent bundles, post-delegation actions, Ephemeral Accounts, eATA, permission-gated reads) | Router placement, live validators, cranks, VRF oracle, action callbacks, fees/commit limits, PER/TEE behavior, or deployed service integration |
 | `mb-stack` | Local base validator + ER + query-filtering integration | Program build/deploy, router, VRF oracle, or every hosted-service behavior |
 | Repository examples harness | Existing example-specific build, deploy, fixture, and local-E2E flows | General coverage beyond the harnessed services and scenarios |
 | Devnet | Router discovery, live delegation propagation, hosted oracles/services, and end-to-end settlement | Mainnet load, production funding, or operational guarantees |
 
-Verify current package versions and commands before recommending an environment. Do not recommend
-MagicSVM as a default merely because it is fast; require a runnable project example or verified
-upstream surface. Check that the installed `@magicblock-labs/ephemeral-validator` version actually
+Verify current package versions and commands before recommending an environment. MagicSVM `0.2.1`
+can replace a live ER for fast ER-lifecycle tests, but it pins `ephemeral-rollups-sdk` `0.14.4`; confirm
+it runs the target program before making it a gate, and keep a live ER or Devnet gate for cranks, VRF,
+callbacks, and fees. Check that the installed `@magicblock-labs/ephemeral-validator` version actually
 exposes `mb-stack` before using it in a gate.
 
 See [local-development.md](local-development.md) for the environment-by-claim workflow and repeatable

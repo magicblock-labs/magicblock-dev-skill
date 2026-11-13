@@ -126,12 +126,16 @@ is not delegated. Delegate first, then top up.
 
 ### Payer pays gas + amount + fixed setup charge
 
-The payer pays the base-layer transaction fee, the `amount` being shuttled, and the current fixed
-`300_000`-lamport sponsored-transfer setup charge. Verify current program constants before production
-use and require a balance comfortably above that total.
+The payer pays the base-layer transaction fee, the `amount` being shuttled, and the fixed
+sponsored-transfer setup charge `SPONSORED_LAMPORTS_TRANSFER_SETUP_LAMPORTS`. Ephemeral SPL Token #161
+raised it from `300_000` to `3_000_000` lamports. On 2026-11-13 devnet charged `3_000_000` and
+mainnet still charged `300_000` until its pending upgrade runs. Check the deployed program for the
+target cluster (see [ephemeral-spl-token.md](ephemeral-spl-token.md#deployment-status)) and require a
+balance comfortably above that total.
 
-This `300_000`-lamport setup charge belongs to the Ephemeral SPL Token sponsored-transfer flow. It is
-not the Delegation Program's separate `3_000_000`-lamport session fee.
+This setup charge belongs to the Ephemeral SPL Token sponsored-transfer flow. #161 set it equal to the
+Delegation Program's `3_000_000`-lamport session fee, but it is a separate charge, so budget for both
+when the flow also delegates.
 
 ### A depleted delegated fee payer fails the whole billable bundle
 
@@ -142,7 +146,7 @@ checks rather than treating a top-up as permission to spend without limit.
 
 ### Reject zero-value top-ups
 
-The program rejects `amount == 0` before making the fixed `300_000`-lamport setup transfer. A failed
+The program rejects `amount == 0` before making the fixed setup transfer. A failed
 submitted transaction can still charge the ordinary network transaction fee, but it does not pay that
 setup charge. Keep the application wrapper's stricter `amount > 0` check so invalid requests never need
 to be submitted.

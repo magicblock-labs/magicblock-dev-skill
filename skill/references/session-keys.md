@@ -76,7 +76,9 @@ revoked token, underfunded session signer, any application-defined budget exhaus
 session account, insufficient token allowance, and token delegate revocation. Do not rely only on a
 successful signature test.
 
-Working composition example: `magicblock-engine-examples/binary-prediction/anchor`.
+Minimal example: `magicblock-engine-examples/session-keys/anchor` (program `anchor-counter-session`,
+`session-keys` `3.1.1` with Anchor `1.0.2`, client `@magicblock-labs/gum-sdk` `^3.0.10`, checked
+2026-11-13). Working composition example: `magicblock-engine-examples/binary-prediction/anchor`.
 
 Sources: [MagicBlock Session Keys docs](https://docs.magicblock.gg/pages/tools/session-keys/introduction) and
 [engine examples](https://github.com/magicblock-labs/magicblock-engine-examples).

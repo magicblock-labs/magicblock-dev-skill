@@ -38,7 +38,7 @@ the delegation program on base, owned by the original program on the ER endpoint
 returned by router `getDelegationStatus`, and reported `isDelegated: true` by
 `getDelegationStatus` sent to that ER endpoint itself.
 
-For the verified SDK v0.16.2 snapshot, use **MagicIntentBundleBuilder** to
+For the verified SDK v0.17.3 snapshot, use **MagicIntentBundleBuilder** to
 schedule commit and commit-and-undelegate intents. Do not use the deprecated
 free functions `commit_accounts` and `commit_and_undelegate_accounts`.
 
@@ -54,7 +54,9 @@ scheduled action: scheduling or eventual commit success alone does not prove tha
 **Commit fees and limits** span the Delegation Program and validator. Without the fee-vault path, a
 plain commit fails once the account's current nonce reaches 10; accepted commits can still consume
 the delegation PDA fee budget at undelegation. With a delegated payer and validator-scoped
-`magic_fee_vault`, commit 26 starts debiting `100_000` lamports per committed account. Read
+`magic_fee_vault`, commit 26 starts debiting `100_000` lamports per committed account. Validator
+1.1.1 refuses to commit an account larger than 10,240 bytes, so do not delegate accounts you will
+need to commit above that size. Read
 [fees-and-commit-economics.md](references/fees-and-commit-economics.md) first for fee, refund,
 sponsorship, cost-estimation, or fee-payer funding questions.
 
@@ -94,7 +96,8 @@ allowance.
 Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported.
 
 - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
-- The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs
+- The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs. Open SDK PR #317 removes `anchor-compat`, so new code should target Anchor 1.x
+- Product features are opt-in: `access-control` (PER), `spl` (eSPL), `vrf`, and `crank`
 
 **Required macros:**
 
@@ -102,8 +105,9 @@ Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported
 - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
 - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
   callback macro authenticates fulfillment. Enable the `vrf` feature on `ephemeral-rollups-sdk`.
-  SDK v0.16.2 re-exports VRF, so new Anchor code does not need a direct
-  `ephemeral-vrf-sdk` dependency. See [vrf.md](references/vrf.md).
+  SDK v0.17.3 re-exports VRF behind that feature, so new Anchor code does not need a direct
+  `ephemeral-vrf-sdk` dependency. In 0.17, `create_request_randomness_ix` is the scoped request
+  (0.16 called it `create_request_scoped_randomness_ix`). See [vrf.md](references/vrf.md).
 
 **Non-Anchor programs:** use the
 `ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
@@ -113,6 +117,11 @@ the target program is native rather than Anchor.
 Versions in this skill are known-good snapshots or compatibility markers. Before changing dependencies,
 inspect the target repository's manifests, toolchain files, lockfiles, and relevant upstream sources.
 See [resources.md](references/resources.md) for the dated snapshot and source links.
+
+Public ERs run validator 1.1.1 (checked 2026-11-13). Validator 2.0 is a release candidate only; it
+moves scheduled tasks to Hydra and changes the commit receipt log. Treat 2.0 notes in
+[cranks.md](references/cranks.md) and [delegation.md](references/delegation.md) as upcoming, and
+check `getVersion` on the target ER before relying on either behavior.
 
 ### Connections
 
@@ -190,6 +199,8 @@ For `InvalidWritableAccount`, missing private balances, validator mismatch, or
 - Query router `getDelegationStatus` and use its `fqdn` for ER reads/transactions.
 - Compare base ownership, router status, ER ownership, and recent ER transaction logs.
 - Treat base ownership by the delegation program as expected for a delegated account.
+- Base-layer settlement transactions are v1 transactions: fetch them with
+  `maxSupportedTransactionVersion: 1`.
 - See [debugging.md](references/debugging.md) for the full runbook.
 
 ### 5. Diagnose possible service-side failures
@@ -198,7 +209,7 @@ For unexpected RPC, routing, oracle, or transaction errors that could be service
 - Always fetch current data; do not answer from remembered status. Use the direct JSON API `https://status.magicblock.app/api/services` as the source of truth.
 - Select the same network the code uses: JSON keys are `mainnet` and `devnet`.
 - Match the affected endpoint to the right region/server and service:
-  - Regions are `asia`, `europe`, `usa`, and `tee`.
+  - Regions are `asia`, `europe`, `usa`, and `tee`; mainnet also has `asia-tyo` and `southamerica`.
   - Service IDs are listed in `.meta.services`; currently `er` (Ephemeral Rollup), `rpc_router`, `pricing_oracle`, and `vrf_oracle`.
   - Use the server entries under `.environments[network].regions[region].servers`; for mainnet Asia this includes `as.magicblock.app`.
 - Interpret `.live_status[service]`: `true` = Operational, `false` = Down, missing/undefined = N/A.
@@ -208,7 +219,7 @@ For unexpected RPC, routing, oracle, or transaction errors that could be service
 
 ### 6. Add appropriate features
 
-- Cranks for recurring automated transactions
+- Cranks for recurring automated transactions (SDK `crank` feature; see [cranks.md](references/cranks.md) for Hydra and validator 2.0 changes)
 - VRF for verifiable randomness in games/lotteries
 - Private payments API for private transfers and swaps
 - Pricing Oracle for verified external market data

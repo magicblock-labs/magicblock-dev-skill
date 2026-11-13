@@ -95,7 +95,7 @@ escrow signer — can be invoked directly by any wallet, which then wields whate
 authority the handler carries (writing the program's state, or signing with a
 program PDA to move its assets).
 
-Source: [Magic Actions — action handler instruction](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/magic-actions/how-to).
+Source: [Magic Actions — action handler instruction](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/magic-actions/implementation).
 
 ## Session Keys require application-defined limits
 
@@ -121,6 +121,10 @@ A successful VRF request is not fulfillment. The application outcome exists only
 
 - Use the current scoped callback identity for the consuming program. In Anchor, apply
   `#[vrf_callback]`; in native/Pinocchio code, validate `scoped_vrf_identity(program_id)`.
+- Never gate a callback on a hardcoded global VRF identity such as
+  `9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`. Any program can request randomness that is delivered
+  under that identity. `gachapon-example` and `00-LEGACY_EXAMPLES/roll-dice` still use this pattern;
+  examples PR #134 fixed it in `rewards-delegated-vrf`. Do not copy those callbacks.
 - Bind the callback to the expected request and application object, and consume each request once.
 - Prevent user-controlled seed grinding when the result has economic value.
 - Represent pending, fulfilled, timed-out, and superseded requests explicitly so a late callback cannot
@@ -129,7 +133,8 @@ A successful VRF request is not fulfillment. The application outcome exists only
 Sources: [VRF security](https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/security),
 [VRF best practices](https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/how-to-guide/best-practices),
 [VRF program source](https://github.com/magicblock-labs/solana-vrf/blob/8397569bd47388f400e7f2f32360fbb5dcac165b/program/src/provide_randomness.rs), and
-[scoped identity source](https://github.com/magicblock-labs/solana-vrf/blob/8397569bd47388f400e7f2f32360fbb5dcac165b/api/src/state/mod.rs).
+[scoped identity source](https://github.com/magicblock-labs/solana-vrf/blob/8397569bd47388f400e7f2f32360fbb5dcac165b/api/src/state/mod.rs), and
+the [Zenith (2025-08) and ARDA (2026-09) VRF audit reports](https://github.com/magicblock-labs/solana-vrf/tree/4c6c97d/security_audits).
 
 ## Pricing Oracle consumers validate identity and freshness
 
@@ -162,9 +167,24 @@ Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real
   endpoint.
 - Keep application authorization independent from PER visibility. Permission to see or submit against
   private state does not by itself authorize a business action.
+- Know the default visibility. In the PER query-filtering service v0.2.0, an account with no
+  permission PDA is public, except an SPL or Token-2022 token account, which only its owner can read.
+  Mints are public. An account owned by a token program that decodes as neither is denied. A
+  permission record is visible only to its members. So reading a delegated token account on a TEE
+  endpoint needs the owner's auth token even without an explicit permission.
+- Listing the System Program as a member of a program-restricted permission lets any program act
+  under it (#101). Do not add it unless that is intended.
+- Expect filtering beyond account reads: signature lists, notifications, and `simulateTransaction`
+  account readback are filtered for unauthorized callers. The service can screen transaction signers
+  against an AML provider and reject risky ones.
+- The challenge accepts a custom `template` (`/auth/challenge?pubkey=…&template=…`). The template
+  must contain `{pubkey}`, or the request returns `400`, and `{timestamp}` renders as
+  `Timestamp: <n>`. Login rejects executable accounts. The `/permission` endpoint is gone (`404` on
+  2026-11-13), and JSON-RPC batch requests are rejected with `400`.
 
-Sources: [PER access control](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control) and
-[TEE client verification](https://docs.magicblock.gg/pages/tools/tee/client-implementation).
+Sources: [PER access control](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control),
+[TEE client verification](https://docs.magicblock.gg/pages/tools/tee/client-implementation), the
+query-filtering service v0.2.0 release (default visibility), and probes of `devnet-tee` on 2026-11-13.
 
 ## Private Payments separate authentication, signing, and settlement
 
@@ -177,7 +197,7 @@ Sources: [PER access control](https://docs.magicblock.gg/pages/private-ephemeral
   not protocol guarantees supplied by the Payments API.
 
 Sources: [Private Payments API](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/api-reference/per/introduction) and
-[challenge/login flow](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/api-reference/per/login).
+[challenge/login flow](https://docs.magicblock.gg/pages/ephemeral-spl-token/api-reference/login).
 
 ## Ephemeral SPL Token queues expose multiple completion states
 
@@ -208,5 +228,5 @@ Sources: [enqueue transfer](https://github.com/magicblock-labs/ephemeral-spl-tok
   checks in the Solana review. Repeat them here only when a MagicBlock product defines a specific
   identity or cross-runtime relationship.
 
-Sources: [Magic Program fee handling](https://github.com/magicblock-labs/magicblock-validator/blob/cec4cf574ace267029e9487b61780d5218256b42/programs/magicblock/src/schedule_transactions/mod.rs) and
+Sources: [Magic Program fee handling](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/programs/magicblock/src/schedule_transactions/mod.rs) and
 [MagicBlock security audits](https://docs.magicblock.gg/pages/overview/additional-information/security-and-audits).

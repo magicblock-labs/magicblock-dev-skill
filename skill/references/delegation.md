@@ -4,22 +4,43 @@
 
 ### Dependencies
 
-SDK version example, verified 2026-07-13. Before changing a real project,
-inspect its existing manifests and [resources.md](resources.md); keep the
-project's versions unless the task explicitly requests an upgrade.
+SDK version example, verified 2026-11-13 against crates.io `0.17.3`. Before
+changing a real project, inspect its existing manifests and
+[resources.md](resources.md); keep the project's versions unless the task
+explicitly requests an upgrade.
 
 ```toml
 # Cargo.toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }
 
 # Anchor line is selected by the SDK feature flag:
 #   "anchor"        → Anchor 1.x
 #   "anchor-compat" → Anchor >=0.28,<1.0
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "access-control"] }
 ```
+
+SDK `0.17.3` feature flags:
+
+| Feature | Enables |
+|---|---|
+| `anchor` | Anchor 1.x (alias for `anchor-modern`) |
+| `anchor-compat` | Anchor >=0.28,<1.0 (includes `backward-compat`) |
+| `backward-compat` | Legacy Solana types without Anchor |
+| `modular-sdk` | Builds against the modular Solana crates (`solana-account-info`, `solana-cpi`, …) |
+| `access-control` | `access_control` module (PER permission CPIs), `anchor::PermissionProgram` |
+| `spl` | `spl` module (eSPL builders), `anchor::EsplProgram`; also enables `encryption` and `instruction` |
+| `instruction` | Re-exports `dlp_api::instruction_builder` as `ephemeral_rollups_sdk::instruction_builder` |
+| `vrf` | `vrf` module, `anchor::{vrf, vrf_callback}` |
+| `crank` | `crank` module (Hydra crank CPIs plus the deprecated legacy scheduling CPIs) |
+| `anchor-debug` | Anchor debug logging |
+
+Without a compatibility flag the SDK targets Solana 3.0. Do not combine `anchor` with
+`anchor-compat` or `backward-compat`; that fails at compile time. Open SDK PR #317 removes
+`anchor-compat` and `backward-compat` (Anchor ≥1.0 only). It is unreleased; check the target
+version's `Cargo.toml` before relying on either flag.
 
 ### Imports
 
@@ -75,6 +96,10 @@ pub struct DelegateInput<'info> {
 }
 ```
 
+Since SDK `0.17.1` (#288), `#[delegate]` rejects any `del` field that is not `UncheckedAccount` or
+`AccountInfo` at compile time. A typed `Account<>` would be written back after the handler, which
+fails with `ExternalAccountDataModified` once SIMD-0460 direct mapping is active.
+
 ## Commit Without Undelegating
 
 ```rust
@@ -126,6 +151,13 @@ pays the ephemeral permission rent, so pre-fund the data PDA during base-layer
 initialization with enough lamports for `EphemeralPermission::size_of(member_count)`.
 Choose a maximum member count up front and enforce that cap in every create and
 update instruction so permission growth cannot exceed the funded capacity.
+
+Default visibility on the TEE (PER `v0.2.0`, verified in source and against devnet-tee on
+2026-11-13): an account with no permission is public, except SPL / Token-2022 token accounts,
+which only their owner can read. Mints stay public, and a token-program account that decodes as
+neither fails closed. Reading a user's token account on a TEE therefore needs that owner's auth
+token. Permission records are visible only to their members. The permission program rejects
+creating a permission for a System-Program-owned account with `InvalidOwner` (#23).
 
 ### Imports
 
@@ -370,6 +402,35 @@ when authority is stored elsewhere or controlled by a multisig. Never expose a
 PDA-signed permission CPI through an instruction that lacks application-level
 authorization.
 
+With the `access-control` feature, SDK `0.17.x` also exposes `anchor::PermissionProgram`, so
+`pub permission_program: Program<'info, PermissionProgram>` can replace the
+`UncheckedAccount` + `address = PERMISSION_PROGRAM_ID` pair.
+
+## Exit Paths and Recovery
+
+Normal exit is `commit_and_undelegate` from the ER. Two other paths exist for when that
+instruction cannot run:
+
+- **Undelegation request from the base layer.** The Delegation Program's `RequestUndelegation`
+  (discriminator `26`) creates an `UndelegationRequest` PDA for one delegated account. The
+  delegation rent payer and the delegated PDA must both sign, so the owner program issues it by CPI
+  with the PDA's seeds. The live validator (`1.1.1`) watches these PDAs and schedules
+  commit-and-undelegate. A backfill poll runs every 5 minutes by default
+  (`undelegation-request-poll-interval`).
+- **Rollback after timeout.** If the validator has not undelegated within
+  `DEFAULT_UNDELEGATION_REQUEST_TIMEOUT_SLOTS = 9000` slots (about 60 minutes),
+  `UndelegateWithRollbackAfterTimeout` (`27`) returns the account to the owner program. It is
+  authorized by the owner program through CPI, as with the request. It returns only the last
+  base-chain state, so any ER state that was never committed is lost. The owner-program wrapper
+  must save the delegated account's data before the CPI and restore it afterwards.
+
+Both instructions are deployed on devnet and mainnet. Both clusters have run Delegation Program
+`0c551fa` since 2026-11-03 (executable hash verified). SDK `0.17.3` has no Anchor or CPI wrapper
+for them. With the `instruction` (or `spl`) feature it re-exports the dlp-api 3.1.0 builders
+`ephemeral_rollups_sdk::instruction_builder::{request_undelegation,
+undelegate_with_rollback_after_timeout}`; issue the resulting instruction by CPI with the
+delegated PDA's seeds.
+
 ## Common errors
 
 ### Method Name Convention
@@ -422,6 +483,20 @@ Do not create or delegate a base-layer permission account. Delegate the data PDA
 then create, update, and close its `EphemeralPermission` on the ER. Pre-fund the
 data PDA for permission rent before delegation.
 
+### Accounts that cannot be committed
+
+The live validator (`1.1.1`) refuses to schedule a commit or commit-and-undelegate for:
+
+- An account whose data is larger than 10,240 bytes (`MAX_PERMITTED_DATA_INCREASE`). The log reads
+  `ScheduleCommit ERR: account <pubkey> is too large to be committed` and the instruction fails
+  with `InvalidAccountData`. Keep delegated accounts at or under 10 KiB, or split state across
+  several PDAs.
+- A Magic ATA. Funds leave it through the eSPL shuttle withdrawal flow instead; see
+  [ephemeral-spl-token.md](ephemeral-spl-token.md).
+
+See [fees-and-commit-economics.md](fees-and-commit-economics.md#failure-map) for the other
+commit-time errors.
+
 ## Implementation checklist
 
 ### Required
@@ -436,15 +511,32 @@ data PDA for permission rent before delegation.
   expected delegated or undelegated state. Use a bounded timeout and fail the test explicitly if the
   transition is not observed
 - Use `GetCommitmentSignature` to extract the base signature from ER logs, then
-  confirm that returned signature separately on the base connection
+  confirm that returned signature separately on the base connection. Base-layer settlement
+  transactions are already v1 transactions on devnet and mainnet (checked 2026-11-13), so fetch
+  them with `maxSupportedTransactionVersion: 1`; a request with `0` fails with "Transaction version
+  (1) is not supported". `@solana/web3.js` 1.98.4's `VersionedMessage.deserialize` rejects v1
+  messages. Whether `Connection.getTransaction` decodes them through its JSON path is untested, so
+  prefer a raw JSON-RPC call or confirming the signature status
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
+
+> **Validator 2.0 (release candidate, not live as of 2026-11-13).** The scheduling transaction
+> logs `ScheduledCommitSent outbox: <address>` instead of
+> `ScheduledCommitSent signature: <sig>`. Find completion with `getSignaturesForAddress(outbox)`
+> then `getTransaction`. The released SDK's `GetCommitmentSignature` parses the old log and will
+> not read the new one until SDK issue #304 lands (open PR #309 adds
+> `waitForSettlement` / `waitForIntent`). Committed accounts must also be writable, including
+> when committing from inside another program (otherwise `ReadonlyDataModified`), and commit IDs
+> are reserved at scheduling time, so the commit limit and fee threshold count queued commits.
+> Check `getVersion` (`magicblock-core`) before relying on either behaviour.
 
 ### Avoid
 
 - Sending delegation transactions to the ER; delegation runs on base layer
 - Sending delegated-account operations to base layer; they run on the ER
 - Omitting `#[ephemeral]` from the program module
-- Using `Account<>` in the delegation context; use `AccountInfo` with the `del` constraint
+- Using `Account<>` in the delegation context; use `AccountInfo` or `UncheckedAccount` with the
+  `del` constraint (a compile error since SDK `0.17.1`)
+- Delegating accounts larger than 10,240 bytes; the validator cannot commit them
 - Omitting `#[commit]` from the undelegation context
 - Calling deprecated `commit_accounts` or `commit_and_undelegate_accounts`; use `MagicIntentBundleBuilder`
 - Creating or delegating a base-layer PER permission account; permissions are ER-local

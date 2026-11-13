@@ -397,6 +397,14 @@ Each action gets its own compute budget. If you chain three actions at
 200,000 CU each, the declared total is 600,000. Increase the budget if any individual
 action does heavy work.
 
+### Action callbacks need a delegated payer and the fee vault
+
+On validator `1.1.1`, `AddActionCallback` expects the payer at account index `0`, the magic context at
+`1`, and the validator-scoped `magic_fee_vault` at `2`. The payer must sign and be delegated, and the
+vault must be writable and delegated. Otherwise the instruction fails with `MissingRequiredSignature`,
+`MissingAccount`, or `IllegalOwner`. Each attachment charges the flat callback fee described in
+[fees-and-commit-economics.md](fees-and-commit-economics.md#4-magic-action-and-callback-charges).
+
 ## Failure, Observation, and Recovery
 
 Magic Actions express a commit-plus-action intent. In any one base-layer attempt, the actions run after
@@ -408,7 +416,9 @@ successful commit—is not proof that any originally scheduled action ran.
 - Define success as the committed account state plus every required base-layer action effect, and model
   commit-without-actions as a distinct recovery state.
 - Record/correlate the ER signature, commitment signature or base transaction, committed accounts, and
-  action target.
+  action target. Base settlement transactions are v1 transactions, and validator 2.0 changes how the
+  commitment is reported; see the `GetCommitmentSignature` notes in
+  [delegation.md](delegation.md#implementation-checklist).
 - Make the target instruction idempotent or guarded by a durable operation ID. A recovery attempt must
   not distribute a reward or apply a settlement twice.
 - Validate insufficient escrow funding, wrong account metas, missing signer seeds, compute exhaustion,

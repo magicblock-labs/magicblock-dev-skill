@@ -13,7 +13,8 @@ required user signatures are added, the client may submit directly to the declar
 
 **Hosted contract snapshot:** endpoint fields, routes, defaults, auth behavior, and fees below were
 verified against the live `/doc` OpenAPI document (`SPL Private Payments API` `0.1.0`) on
-**2026-10-20**. This service is mutable. Re-fetch
+**2026-10-20**, with the withdraw, challenge, and fee fields re-checked on **2026-11-13**. This
+service is mutable. Re-fetch
 `https://payments.magicblock.app/doc` before implementation and treat any field with no declared schema
 default—such as `exactOut` in this snapshot—as unspecified rather than inferred.
 
@@ -32,9 +33,10 @@ everything on upstream `main` through #148 was live for both devnet and mainnet:
 | x402 / MPP merchant checkouts (#143) | ✅ | `/v1/x402/supported` lists `mainnet`, `mainnet-private`, `devnet`, `devnet-private` |
 | `maxDelayMs` cap of 31 days (`2678400000`) for transfers and private swaps (#148) | ✅ | `2678400001` is rejected; `600001` is accepted |
 
-The on-chain program behind the API is older than the API code: neither devnet nor mainnet runs
-#150 yet. See the program table in
-[ephemeral-spl-token.md](ephemeral-spl-token.md#deployment-status).
+Also live on 2026-11-13: `feeBalance: "ephemeral"` gasless withdrawals (#147, eSPL ix `37`, deployed on
+both clusters). The on-chain program differs by cluster: devnet runs everything through #161, and
+mainnet lacks #158 and #161. The API's `fees.lamports` still reports pre-#161 setup fees. See the
+program table in [ephemeral-spl-token.md](ephemeral-spl-token.md#deployment-status).
 
 ## Contents
 
@@ -177,7 +179,7 @@ Generate a challenge string for a wallet to sign as part of the login flow.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | pubkey | string (pubkey) | Yes | Wallet that will read private data |
-| cluster | string | No | `"mainnet"`, `"devnet"`, or custom RPC URL |
+| cluster | string | No | Defaults to `mainnet`. Use `"mainnet-private"` or `"devnet-private"` for a real challenge (see [Authentication](#authentication)); other values return a `MOCK:` challenge |
 
 ```json
 { "challenge": "1234567890" }
@@ -333,6 +335,11 @@ appears on base in cleartext. With `initIfMissing`, ephemeral→ephemeral transf
 Zero-amount setup transfers and native SOL stay on the legacy cleartext route. See
 [ephemeral-spl-token.md](ephemeral-spl-token.md#magic-atas).
 
+Only private base→base settlement creates a missing recipient token account on base (for the first
+delivered split). A private ephemeral→base split to an owner without a base token account is refunded
+to the sender instead. With a `splitAcrossKeys` stealth pool, keys after the first need an existing
+token account. See [ephemeral-spl-token.md](ephemeral-spl-token.md#queued-private-settlement).
+
 The live request schema accepts `amount: 0` for specific private base→ephemeral setup/delegation flows;
 do not generalize zero as a meaningful payment amount for other routes. With `exactOut: true`, the
 recipient receives `amount` and the sender pays the platform fee in addition; with `false`, the fee is
@@ -367,6 +374,7 @@ Withdraw SPL tokens from an ephemeral rollup back to Solana.
 | escrowIndex | integer (>=0) | No | Escrow index |
 | idempotent | boolean | No | Per-request selector for the default shuttle withdrawal builder (`true`) or legacy direct withdrawal builder (`false`) |
 | gasless | boolean | No | Defaults to `false`. See [Gasless deposits and withdrawals](#gasless-deposits-and-withdrawals) |
+| feeBalance | `"base"` \| `"ephemeral"` | No | Defaults to `base`. With `gasless: true` and `ephemeral`, the relay fee is taken from the ER balance (eSPL ix `37`). Requires the shuttle flow |
 
 When the owner's ER balance is held in a Magic ATA, the withdraw builder detects it, skips the eATA
 init/delegate instructions, and closes the Magic ATA after shuttle settlement.
@@ -389,11 +397,20 @@ sponsor's signature, so the owner adds their signature without changing the mess
 - Supported mints: mainnet and `mainnet-private` USDC or USDT, and devnet and `devnet-private` USDC
   (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`). Custom clusters and off-curve owners are rejected.
 - `amount` must be at least `500000` (0.5 tokens). A relay fee of `200000` (0.2 tokens) is charged
-  upfront from the owner's **existing base-chain ATA**. Depositing 1 USDC needs 1.2 USDC on base.
-  Withdrawing 1 USDC needs 0.2 USDC on base plus 1 USDC on the ER, because the fee cannot come from
-  the pending withdrawal proceeds.
-- Responses report `fees.tokens: "200000"` and `fees.lamports: "500000"` (sponsor-paid shuttle
-  delegation, or `"0"` with `idempotent: false`). Neither figure includes network fees or rent.
+  upfront from the owner's **existing base-chain ATA** by default. Depositing 1 USDC needs 1.2 USDC on
+  base. Withdrawing 1 USDC the default way needs 0.2 USDC on base plus 1 USDC on the ER.
+- A withdrawal can instead take the fee from the ER balance with `"feeBalance": "ephemeral"` (#147).
+  The owner then needs no SOL, tokens, or ATA on base: the sponsor creates the base ATA, the program
+  moves the fee into the mint's transfer-queue vault in the same ER transaction (ix `37`), and the
+  owner receives `amount - 200000`. It requires the shuttle flow (`idempotent` omitted or `true`) and a
+  readable ER balance of at least `amount`. Otherwise the API returns `INSUFFICIENT_EPHEMERAL_BALANCE`,
+  or `INVALID_GASLESS_WITHDRAW_FEE_BALANCE` without `gasless` or with `idempotent: false`. Each
+  request uses its own shuttle. A request whose amount the ER balance no longer covers when it runs
+  fails in the ER and leaves the balance untouched.
+- Responses report `fees.tokens: "200000"` and `fees.lamports` (sponsor-paid shuttle delegation, or
+  `"0"` with `idempotent: false`). Neither figure includes network fees or rent. On 2026-11-13 the API
+  still reported `"500000"`, while the devnet program charges 3,000,000 lamports since eSPL #161
+  (mainnet stays at 500,000 until it upgrades). Treat the program constants as the source of truth.
 - On shuttle flows the relay fee is collected when the base transaction succeeds. A later
   settlement failure does not refund it automatically.
 - If the sponsor is unavailable, the API returns `503`.

@@ -5,10 +5,15 @@ sponsorship, `magic_fee_vault`, refunds, fee-payer top-ups, Magic Action charges
 claims. The active model is split between the Delegation Program on Solana and the MagicBlock
 validator. Reading either repository alone gives an incomplete answer.
 
-Values below were source-verified on 2026-10-06 against:
+Values below were source-verified on 2026-10-06 and re-checked on 2026-11-13 against:
 
-- Delegation Program `main` at `cd128709c2fe5577b01e5060e28318e161159887`
-- MagicBlock validator release `master` at `cec4cf574ace267029e9487b61780d5218256b42`
+- Delegation Program `main` at `0c551fa64cd13d6dabc51dbf6d1575bde2d38067`, the build deployed on
+  devnet and mainnet since 2026-11-03 (executable hash verified)
+- MagicBlock validator tag `v1.1.1`, the version every public ER reports through `getVersion`
+
+The validator's `master` branch now carries the 2.0 line (release candidates only). See
+[Validator 2.0 changes](#validator-20-changes-release-candidate) before applying these numbers to a
+2.0 node.
 
 Do not call commits "free" merely because no lamports move during the scheduling instruction. A
 commit can consume the fee budget held in delegation PDAs and be charged later at undelegation.
@@ -86,12 +91,21 @@ Consequences:
 - Commits 2, 3, and so on add `1_000_000` lamports each.
 - Collection is capped by the two PDA balances. An exhausted deposit does not cause
   `InsufficientFunds`, and this path does not record the remainder as debt.
-- Every unused lamport is returned to the `rent_payer` stored at delegation time, not necessarily to
-  the current account authority or the transaction payer that requested undelegation.
+- The refund goes to the `rent_payer` stored at delegation time, not necessarily to the current
+  account authority or the transaction payer that requested undelegation.
+- Since Delegation Program #274 (deployed 2026-11-03), if adding the refund would still leave that
+  rent payer below rent-exemption (for example an empty sponsor wallet receiving a few thousand
+  lamports), the refund goes to the validator fees vault instead. Before this fix the whole
+  undelegation failed in that case. A funded rent payer is refunded as before.
 
-`RENT_FEES_PERCENTAGE = 10` still exists in `dlp-api/src/consts.rs`, but the active cleanup path does
-not reference it. Do not calculate the session charge as 10% of rent. The current cleanup uses the
-fixed session/commit formula above and uses `PROTOCOL_FEES_PERCENTAGE = 10` only for distribution.
+dlp-api 4.0 removed `RENT_FEES_PERCENTAGE`. Do not calculate the session charge as a percentage of
+rent. The cleanup uses the fixed session/commit formula above and uses
+`PROTOCOL_FEES_PERCENTAGE = 10` only for distribution.
+
+Do not read these amounts from `ephemeral_rollups_sdk::dlp_api::consts`. SDK `0.17.3` re-exports
+dlp-api `3.1.0`, whose `COMMIT_FEE_LAMPORTS = 100_000` and `SESSION_FEE_LAMPORTS = 300_000` are the
+values from before the 10x increase. dlp-api `4.0.1` has `1_000_000` and `3_000_000`, which match the
+deployed program.
 
 ### A zero-data account rent top-up is not a fee
 
@@ -199,6 +213,10 @@ vault.
 
 ### Legacy two-step commit rent and collateral
 
+The Delegation Program still supports this path, but validator `1.1.1` no longer uses it: it builds
+only `commit_finalize` and `commit_finalize_from_buffer` tasks (validator #1763 / #1764 removed the
+legacy Commit/Finalize tasks). Treat the following as reference for older nodes.
+
 The legacy `CommitState` / `CommitDiff` path creates temporary commit-state and commit-record PDAs.
 The validator funds their rent and, when a committed balance increased, fronts the balance delta as
 collateral. `Finalize` applies the state, closes both temporary PDAs, and returns their remaining
@@ -305,6 +323,7 @@ single 10% cut when reconciling vault balances.
 
 The validator's automatic claim task skips balances at or below `100_000_000` lamports and defaults to
 a 24-hour polling interval. That threshold controls claim batching; it is not an application fee.
+Validator 2.0 removes this automatic task; see [Validator 2.0 changes](#validator-20-changes-release-candidate).
 
 ## Funding a delegated fee payer
 
@@ -319,9 +338,11 @@ per-account live commit fees
 ```
 
 Use `lamportsDelegatedTransferIx` for the SDK's sponsored base-to-ER top-up flow. Read
-[lamports-topup.md](lamports-topup.md) for its routing, salt, setup-charge, and retry rules. Its current
-`300_000`-lamport setup charge comes from the Ephemeral SPL Token program and must not be confused with
-the Delegation Program's `3_000_000`-lamport session fee.
+[lamports-topup.md](lamports-topup.md) for its routing, salt, setup-charge, and retry rules. Its setup
+charge comes from the Ephemeral SPL Token program and must not be confused with the Delegation
+Program's `3_000_000`-lamport session fee. eSPL #161 raised that charge from `300_000` to `3_000_000`
+lamports. As of 2026-11-13 devnet runs the new value and mainnet still charges `300_000`; read the
+deployed program's constant rather than assuming either.
 
 The Delegation Program also exposes `top_up_ephemeral_balance`. It creates a zero-data ephemeral
 balance PDA if needed and transfers the requested lamports into it. That instruction adds no explicit
@@ -339,6 +360,10 @@ required rent, and ordinary base transaction fee.
 | Delegated payer cannot cover the whole calculated fee | `InsufficientFunds` |
 | Ephemeral Account sponsor cannot cover create/grow rent | `InsufficientFunds` |
 | Delegation deposits cannot cover cleanup request | No underfund error; charge is capped and no debt is recorded |
+| Refund would leave the recorded rent payer below rent-exemption | Refund goes to the validator fees vault (since DLP #274) |
+| Committed account data larger than 10,240 bytes | `InvalidAccountData`; log `ScheduleCommit ERR: account <pubkey> is too large to be committed` |
+| Intent exceeds the validator's size limits | Custom `0xA0000002` (`INTENT_TOO_LARGE_ERR`) |
+| Commit or undelegate of a Magic ATA | Rejected; log says to use the shuttle withdrawal flow |
 | Validator claims more than its base vault holds above rent | `InsufficientFunds` |
 
 ## How to verify current behavior
@@ -347,10 +372,11 @@ Check both repositories, because matching numeric constants do not prove matchin
 
 ### Delegation Program
 
-- `dlp-api/src/consts.rs`: fixed session/commit amounts, protocol percentage, declared but unused
-  `RENT_FEES_PERCENTAGE`, zero-data rent exception
+- `dlp-api/src/consts.rs`: fixed session/commit amounts, protocol percentage, zero-data rent
+  exception
 - `src/processor/fast/undelegate.rs`: after-first commit count, capped cleanup request
-- `src/processor/fast/utils/pda.rs`: refund destination and cleanup split
+- `src/processor/fast/utils/pda.rs`: refund destination, the rent-payer dust fallback, and cleanup
+  split
 - `src/processor/fast/internal/commit_finalize_internal.rs`: base-layer lamport-delta settlement into
   the validator fees vault
 - `src/processor/fast/commit_state.rs` and `src/processor/fast/finalize.rs`: validator-funded
@@ -358,7 +384,9 @@ Check both repositories, because matching numeric constants do not prove matchin
 - `src/processor/validator_claim_fees.rs`: claim-time protocol percentage and insufficient-funds path
 - `src/processor/top_up_ephemeral_balance.rs`: base-layer escrow funding behavior
 
-Pinned source: [Delegation Program fee constants](https://github.com/magicblock-labs/delegation-program/blob/6898ef4b82ba1f2b6fbb5d91eca578729edbbeb8/dlp-api/src/consts.rs).
+Pinned source: [Delegation Program fee constants](https://github.com/magicblock-labs/delegation-program/blob/0c551fa64cd13d6dabc51dbf6d1575bde2d38067/dlp-api/src/consts.rs).
+The repository's default branch is now `dlp-v2` (unreleased fraud-proof work); the deployed program
+builds from `main`.
 
 ### MagicBlock validator
 
@@ -376,4 +404,18 @@ Pinned source: [Delegation Program fee constants](https://github.com/magicblock-
   refundable ER-only Ephemeral Account rent
 - `magicblock-validator-admin/src/claim_fees.rs`: automatic claim threshold and cadence
 
-Pinned source: [validator commit and action fee calculation](https://github.com/magicblock-labs/magicblock-validator/blob/cec4cf574ace267029e9487b61780d5218256b42/magicblock-core/src/intent/mod.rs).
+Pinned source: [validator commit and action fee calculation](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/magicblock-core/src/intent/mod.rs).
+
+## Validator 2.0 changes (release candidate)
+
+As of 2026-11-13, validator `v2.0.0-rc.3` is a draft prerelease with no published binaries, and
+every public ER runs `1.1.1`. Its source changes these economics:
+
+- The per-account live commit fee after the threshold rises from `100_000` to `1_000_000` lamports.
+- Commit IDs are reserved when the commit is scheduled, so the limit of 10 and the threshold of 25
+  count queued commits, not only finalized ones.
+- The base-fee setting is removed; ER execution is always free.
+- The automatic fee-claim task is removed. Operators run `magicblock claim-fees` on their own
+  schedule.
+
+Check `getVersion` (`magicblock-core`) on the target ER before using either set of numbers.
