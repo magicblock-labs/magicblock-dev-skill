@@ -184,18 +184,24 @@ Pinocchio `roll-dice` example in the engine examples repo.
 Program behaviour, verified 2026-11-13 against SolanaVrf v1.0 (`solana-vrf` commit `4c6c97d`, the
 build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged):
 
-- A request expires `QUEUE_TTL_SECONDS` = 120 seconds of wall-clock time after its own creation
-  timestamp. Expired requests are purged and their fee goes to the oracle; there is no refund. Fees
+- A request becomes purgeable `QUEUE_TTL_SECONDS` = 120 seconds of wall-clock time after its own
+  creation timestamp. Expiry does not invalidate it: `ProvideRandomness` does not check request age, so
+  the oracle can still fulfill it until the queue's oracle runs `PurgeExpiredRequests`, which it does
+  on its own retry schedule rather than at exactly 120 seconds. A purged request's fee goes to the
+  oracle; there is no refund. Fees
   are `VRF_LAMPORTS_COST` 500,000 lamports (regular) and `VRF_HIGH_PRIORITY_LAMPORTS_COST` 800,000
   (high priority); the delegated ephemeral queue is fee-exempt.
 - A paused queue rejects new requests with `QueuePaused` (custom error `15`).
-- The callback is rejected if any callback account is a program (executable, or owned by a BPF or
-  native loader) unless it is on the allowlist: System, Token, Token-2022, Associated Token,
-  Metaplex Token Metadata, MPL Core, Delegation, and Magic programs. Pass other programs' data
-  accounts, not the programs themselves.
+- For legacy global-identity requests only, the callback is rejected if any callback account is a
+  program (executable, or owned by a BPF or native loader) unless it is on the allowlist: System,
+  Token, Token-2022, Associated Token, Metaplex Token Metadata, MPL Core, Delegation, and Magic
+  programs. Scoped requests (the default in SDK 0.17) skip this check and may pass other program
+  accounts to the callback.
 
-So a "timed out" request is final after 120 seconds: never wait longer for its callback, and let the
-user retry with a new request.
+A "timed out" request is not final after 120 seconds. If the application lets the user retry, record
+the new request as current and have the callback reject any fulfillment for a superseded request (match
+the request's identity, for example a stored request seed or pending-request ID), so a late callback
+for the old request and the retry cannot both settle.
 
 Persist enough state to correlate one request with one permitted callback. Use this state machine:
 
@@ -227,8 +233,9 @@ requests, timeout, late callback after retry, callback program error, wrong queu
 - `caller_seed` adds client-side entropy; `callback_args` forwards extra data to the callback.
 - Treat request acceptance and callback fulfillment as separate observable states.
 - Bind one callback to one request and make its economic effects idempotent.
-- Requests expire after 120 seconds with no refund; program accounts in the callback list are
-  rejected unless allowlisted.
+- Requests become purgeable after 120 seconds and are not refunded once purged, but can still be
+  fulfilled until the purge runs; reject late callbacks for superseded requests. Legacy requests
+  reject non-allowlisted program accounts in the callback list.
 
 Docs: [Solana VRF](https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/solana-vrf)
 (the older `why-verifiable-randomness-onchain` URL redirects there).

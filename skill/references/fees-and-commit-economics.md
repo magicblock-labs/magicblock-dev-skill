@@ -93,10 +93,14 @@ Consequences:
   `InsufficientFunds`, and this path does not record the remainder as debt.
 - The refund goes to the `rent_payer` stored at delegation time, not necessarily to the current
   account authority or the transaction payer that requested undelegation.
-- Since Delegation Program #274 (deployed 2026-11-03), if adding the refund would still leave that
-  rent payer below rent-exemption (for example an empty sponsor wallet receiving a few thousand
-  lamports), the refund goes to the validator fees vault instead. Before this fix the whole
-  undelegation failed in that case. A funded rent payer is refunded as before.
+- Since Delegation Program #274 (deployed 2026-11-03), the program closes the delegation record PDA
+  and then the delegation metadata PDA, taking the remaining fee from each before refunding it. It
+  checks rent-exemption separately for each refund: if adding that PDA's refund would still leave the
+  rent payer below rent-exemption, that refund goes to the validator fees vault instead. A later
+  refund does not rescue an earlier one; with an empty payer, a 600,000-lamport record refund goes to
+  the vault even if the next 1,500,000-lamport metadata refund would have made the payer rent-exempt.
+  Before this fix the whole undelegation failed in that case. Fund the rent payer to rent-exemption
+  before undelegating if you want the full refund back.
 
 dlp-api 4.0 removed `RENT_FEES_PERCENTAGE`. Do not calculate the session charge as a percentage of
 rent. The cleanup uses the fixed session/commit formula above and uses
@@ -360,7 +364,7 @@ required rent, and ordinary base transaction fee.
 | Delegated payer cannot cover the whole calculated fee | `InsufficientFunds` |
 | Ephemeral Account sponsor cannot cover create/grow rent | `InsufficientFunds` |
 | Delegation deposits cannot cover cleanup request | No underfund error; charge is capped and no debt is recorded |
-| Refund would leave the recorded rent payer below rent-exemption | Refund goes to the validator fees vault (since DLP #274) |
+| A PDA refund would leave the recorded rent payer below rent-exemption | That PDA's refund goes to the validator fees vault (since DLP #274); checked per PDA, record before metadata. Fund the payer before undelegating |
 | Committed account data larger than 10,240 bytes | `InvalidAccountData`; log `ScheduleCommit ERR: account <pubkey> is too large to be committed` |
 | Intent exceeds the validator's size limits | Custom `0xA0000002` (`INTENT_TOO_LARGE_ERR`) |
 | Commit or undelegate of a Magic ATA | Rejected; log says to use the shuttle withdrawal flow |

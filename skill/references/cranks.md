@@ -49,8 +49,14 @@ executes `MagicBlockInstruction::ScheduleTask` on the Magic program. Build the C
 `crank` feature; the `crank` module does not exist without it:
 
 ```toml
+# Anchor 1.x
 ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "crank"] }
+# Anchor >=0.28,<1.0: use this line instead
+# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor-compat", "crank"] }
 ```
+
+Keep only the line that matches the program's existing Anchor version; enabling both `anchor` and
+`anchor-compat` fails to compile.
 
 ```rust
 #[allow(deprecated)]
@@ -177,8 +183,18 @@ top-level, not through CPI.
 | Ephemeral (crank lives as an ephemeral account on the ER) | `eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf` | 2026-08-26 (Mainnet and Devnet) |
 
 - Up to 16 scheduled instructions per crank (`MAX_INSTRUCTIONS`), 32 accounts, 1,024 data bytes.
-- Scheduled instructions cannot carry signer metas. A handler that needs crank-only authority must
-  authenticate the preceding Hydra `Trigger` through the instructions sysvar.
+- Scheduled instructions cannot carry signer metas. A preceding `Trigger` alone is not
+  authorization: anyone can create and trigger their own crank that schedules your instruction. A
+  handler that needs crank-only authority must take the instructions sysvar and reject unless
+  `ix[k-1]` has the Hydra program ID, the `Trigger` discriminator, and, as its first account, the
+  expected crank PDA. Derive the expected PDA with the seeds your crank was created with: the
+  ephemeral program accepts both the payer-bound `[b"crank", payer, seed]` (preferred) and the
+  legacy `[b"crank", seed]`; the deployed base program supports only the legacy seeds until it is
+  redeployed. Do not pass the crank PDA as an account of the scheduled instruction (it is writable in
+  `Trigger`, so the crank could never match).
+- When the schedule's creator matters, also load the crank header (`hydra_api::state::load_crank`)
+  and require `authority == expected_authority` and `authority_signer == 1`; with
+  `authority_signer == 0` the authority is stored only for cancellation and proves nothing.
 - Base layer: each trigger pays the cranker 10,000 lamports plus `priority_tip` from the crank's
   balance. ER: the flat reward is `0`, so `priority_tip` is the cranker's only incentive.
 - Something must run `hydra-cranker` (published as `@magicblock-labs/hydra-cranker-<platform>` npm
@@ -195,8 +211,10 @@ Hydra. When 2.0 ships:
 
 - `ScheduleTask` is forwarded to a `hydra-ephemeral` crank. `crank_signer_pda` and `ExecuteCrank` are
   removed (`ExecuteCrank` fails with "crank execution is handled by hydra"), and any signer meta in a
-  scheduled instruction is rejected. Privileged handlers must check the preceding Hydra `Trigger`
-  through the instructions sysvar, as the `crank-counter` example comment describes.
+  scheduled instruction is rejected. Privileged handlers must authenticate the preceding Hydra `Trigger`
+  and its crank (program ID, discriminator, expected crank PDA, and the crank header's `authority` /
+  `authority_signer`), as described in [Hydra cranks](#hydra-cranks). Checking only that a `Trigger`
+  precedes the handler, which is all the `crank-counter` example comment describes, is not enough.
 - The crank PDA is derived from `authority` and `task_id`, so task IDs are scoped per authority and
   the collision guidance above no longer applies.
 - Intervals round up to whole slots (minimum one), and cancelling a crank that doesn't exist fails.

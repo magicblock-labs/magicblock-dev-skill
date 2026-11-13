@@ -405,6 +405,14 @@ vault must be writable and delegated. Otherwise the instruction fails with `Miss
 `MissingAccount`, or `IllegalOwner`. Each attachment charges the flat callback fee described in
 [fees-and-commit-economics.md](fees-and-commit-economics.md#4-magic-action-and-callback-charges).
 
+`AddActionCallback` attaches to the **latest** intent scheduled in the current transaction; it takes
+only an action index, not an intent ID. If a program schedules intents A and B and then attaches A's
+callback, the callback lands on B's action at that index. Attach each intent's callbacks immediately
+after scheduling it and before scheduling the next one. The validator also rejects the attachment
+unless the payer matches that intent's payer, the CPI caller is the action's source program, the
+intent was scheduled with `ScheduleIntentBundle` in the same slot and blockhash, and the action has
+no callback yet (`InvalidAccountData` / `InvalidInstructionData`).
+
 ## Failure, Observation, and Recovery
 
 Magic Actions express a commit-plus-action intent. In any one base-layer attempt, the actions run after

@@ -337,7 +337,9 @@ Zero-amount setup transfers and native SOL stay on the legacy cleartext route. S
 
 Only private base→base settlement creates a missing recipient token account on base (for the first
 delivered split). A private ephemeral→base split to an owner without a base token account is refunded
-to the sender instead. With a `splitAcrossKeys` stealth pool, keys after the first need an existing
+to the sender's existing base token account instead; refunds never create that account, so the sender
+must keep one for the mint. On a program without eSPL #158 (mainnet on 2026-11-13), the refund of a
+transfer queued without the receipt permission pair is rolled back; the API adds the pair. With a `splitAcrossKeys` stealth pool, keys after the first need an existing
 token account. See [ephemeral-spl-token.md](ephemeral-spl-token.md#queued-private-settlement).
 
 The live request schema accepts `amount: 0` for specific private base→ephemeral setup/delegation flows;
@@ -411,7 +413,9 @@ sponsor's signature, so the owner adds their signature without changing the mess
   `"0"` with `idempotent: false`). Neither figure includes network fees or rent. On 2026-11-13 the API
   still reported `"500000"`, while the devnet program charges 3,000,000 lamports since eSPL #161
   (mainnet stays at 500,000 until it upgrades). Treat the program constants as the source of truth.
-- On shuttle flows the relay fee is collected when the base transaction succeeds. A later
+- On shuttle flows the relay fee is collected when the base transaction succeeds. With
+  `"feeBalance": "ephemeral"` it is instead collected by ix `37` in the ER transaction, so record the
+  fee only after that ER transaction executes, not when the base transaction lands. Either way, a later
   settlement failure does not refund it automatically.
 - If the sponsor is unavailable, the API returns `503`.
 
