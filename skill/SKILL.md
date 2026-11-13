@@ -1,6 +1,6 @@
 ---
 name: magicblock
-description: Design, implement, and debug MagicBlock applications on Solana. Covers Ephemeral Rollups with delegated state; ER/PER architecture and settlement; private payments and token flows; oracles and randomness; scheduling and temporary authority; security and local validation. Use for MagicBlock product selection, integration, cross-product design, or production troubleshooting.
+description: Build and debug MagicBlock apps on Solana. Covers Ephemeral Rollups for gasless, real-time, low-latency, high-frequency transactions (games, trading, payments, social); private execution and private SPL payments (PER/TEE); verifiable randomness (VRF); price feeds; cranks and scheduled tasks; session keys; and delegate, commit, and undelegate flows. Use when a Solana app needs gasless or high-throughput transactions, an onchain game, private or confidential transfers, onchain randomness, or automation, even if MagicBlock is not named. Also use for MagicBlock integration, settlement, and production troubleshooting.
 ---
 
 # MagicBlock Development Skill
