@@ -32,7 +32,11 @@ action's PDA seeds and account metas to the instruction it calls. Account indice
 format refer to the `signers` followed by `non_signers` in the simple form; merged/inserted actions
 use a different index order. Prefer `.cleartext()` for ordinary actions and check the SDK's
 [`PostDelegationActions` layout](https://github.com/magicblock-labs/delegation-program/blob/main/dlp-api/src/args/delegate_with_actions.rs)
-when constructing the compact form by hand.
+when constructing the compact form by hand. Since Delegation Program `v2.0.1` / dlp-api `4.0.1`
+(#187, deployed), a non-signer meta may resolve to a signer slot, while a signer meta must still
+resolve to signer storage backed by a signed `AccountInfo`. Payloads built for earlier versions
+still validate. The link above targets `main`, which is the deployed line; the repository's default
+branch is now `dlp-v2` (unreleased), where this path does not exist.
 
 ## Anchor delegation call
 

@@ -94,6 +94,15 @@ Test create, repeated create where supported, serialization, resize up/down, max
 underfunding, unauthorized mutation, close/refund, and the loss boundary. Validate on a live ER because
 ordinary Solana test validators do not prove ER-only lifecycle behavior.
 
+`magicsvm` `0.2.1` processes `CreateEphemeralAccount`, `ResizeEphemeralAccount`, and
+`CloseEphemeralAccount`, so it can cover create/resize/close logic in fast in-process tests. Its
+handlers do not move sponsor rent into the vault, so sponsor underfunding and the rent refund still need
+the local stack or a live ER.
+
+Open SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magic` field marker,
+`create/init_if_needed/resize/close_magic_<field>`), keeping the current names as deprecated aliases.
+It is unreleased; use the names that the target SDK version exports.
+
 Working example: `magicblock-engine-examples/ephemeral-account-chats/anchor`.
 
 Sources: [MagicBlock Ephemeral Accounts docs](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/introduction/ephemeral-accounts) and

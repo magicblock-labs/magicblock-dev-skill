@@ -22,24 +22,30 @@ cross-runtime behavior the product depends on.
 ## Local stack
 
 The current package family includes `@magicblock-labs/ephemeral-validator`, with binaries such as
-`mb-stack`, `mb-test-validator`, `ephemeral-validator`, `rpc-router`, and `vrf-oracle`. Names, versions,
+`mb-stack`, `mb-test-validator`, `ephemeral-validator`, `query-filtering-service`, `rpc-router`, and
+`vrf-oracle`. `mb-stack` starts `mb-test-validator`, `ephemeral-validator`, and
+`query-filtering-service`; it does not start the router or VRF oracle. Names, versions,
 and required configuration are version-sensitive: inspect the current package metadata and official
 local-development guide before scripting them.
 
-For the known-good `0.13.7` snapshot verified 2026-07-15, start the pinned package in a dedicated
-terminal:
+For the known-good `1.1.1` snapshot verified 2026-11-13 (the version public ERs run), start the pinned
+package in a dedicated terminal:
 
 ```bash
-npx --yes --package=@magicblock-labs/ephemeral-validator@0.13.7 mb-stack
+npx --yes --package=@magicblock-labs/ephemeral-validator@1.1.1 mb-stack
 ```
 
-In that `0.13.7` snapshot, the defaults are base RPC `http://127.0.0.1:8899`, internal ER RPC
+The `mb-stack` scripts are byte-identical to the earlier `0.13.7` snapshot. In `1.1.1`, the defaults are base RPC `http://127.0.0.1:8899`, internal ER RPC
 `http://127.0.0.1:7799`, and public query-filtering/ER entrypoint `http://127.0.0.1:6699`; websocket
 ports are each HTTP port plus one. Override them with `MB_STACK_BASE_PORT`, `MB_STACK_ER_PORT`, and
 `MB_STACK_PUBLIC_PORT`. Extra CLI arguments are forwarded to `mb-test-validator`, so base-validator
 flags such as account/program loading belong after `mb-stack`. Use `MB_STACK_ER_REMOTES` only when the
 ER must clone from/commit to a nonlocal base. Stop the supervisor with the terminal interrupt and
 confirm its child processes exit.
+
+Validator 2.0 (release candidate only, not published) adds `mb-stack --vrf`, `--vrf-er`, and
+`--cranker` (with `MB_STACK_CRANKER_KEYPAIR`) to start a VRF oracle and a Hydra cranker. Do not script
+these flags against `1.1.1`.
 
 Limitations:
 
@@ -49,9 +55,20 @@ Limitations:
 - A base validator plus ER does not automatically prove router, VRF, PER, or hosted API behavior.
 - RPC URLs, validator identity, websocket URLs, and program deployments must agree across the test.
 
-`@magicblock-labs/magicsvm` can be useful for fast in-process tests when the target repository has a
-verified runnable setup. It is not evidence that live routing, service scheduling, TEE privacy, or
-cross-layer propagation works.
+`magicsvm` (`@magicblock-labs/magicsvm` on npm, `magicsvm` crate; `0.2.1` verified 2026-11-13) runs a
+base ledger and an ephemeral ledger in process. It executes the real Delegation Program and Magic
+program paths for delegate, `ScheduleCommit`, `ScheduleCommitAndUndelegate`, `ScheduleCommitFinalize`,
+`ScheduleBaseIntent`, and `ScheduleIntentBundle`, including post-delegation actions, Ephemeral Account
+create/resize/close, eATA projection, and permission-gated reads (Rust
+`get_account_for(target, &pubkey)` returns a `StockAccount` and hides private accounts unless the
+`authorized_user` is a permission member). That makes it a good fast test for the ER account
+lifecycle.
+
+It does not cover `ScheduleTask`/`CancelTask` (cranks), action callbacks, VRF, the router, fees, the
+fee vault, or commit limits; ER transactions are fee-free in it. It pins old dependencies
+(`ephemeral-rollups-sdk` `0.14.4`, `magicblock-magic-program-api` `0.8.8`), so check that the target
+program's SDK line works with it. It is not evidence that live routing, service scheduling, TEE privacy,
+or cross-layer propagation works.
 
 ## Repeatable workflow
 

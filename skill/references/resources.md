@@ -23,7 +23,7 @@ EPHEMERAL_WS_ENDPOINT=wss://devnet-as.magicblock.app/
 - JSON path: `.environments[network].regions[region].servers[fqdn]`. Status is per server: there is
   no top-level `live_status` or `metrics`.
 - Network keys: `mainnet`, `devnet`
-- Region keys: `asia`, `europe`, `usa`, `tee`
+- Region keys: `asia`, `europe`, `usa`, `tee`; mainnet also has `asia-tyo` and `southamerica`
 - Service IDs: `er`, `rpc_router`, `pricing_oracle`, `vrf_oracle`
 - Live state: `<server>.live_status[service]` (`true` = Operational, `false` = Down, missing = N/A)
 - Downtime history: `<server>.metrics[service]` minutes per day aligned with the top-level
@@ -34,13 +34,20 @@ Current FQDNs are discoverable from the API. Common entries:
 | Network | Region | Status API FQDN                 |
 | ------- | ------ | ------------------------------- |
 | Mainnet | Asia   | `as.magicblock.app`             |
+| Mainnet | Asia (Tokyo) | `as-tyo.magicblock.app`   |
 | Mainnet | Europe | `eu.magicblock.app`             |
+| Mainnet | South America | `sa.magicblock.app`      |
 | Mainnet | USA    | `us.magicblock.app`             |
 | Mainnet | TEE    | `mainnet-tee-as.magicblock.app` |
 | Devnet  | Asia   | `devnet-as.magicblock.app`      |
 | Devnet  | Europe | `devnet-eu.magicblock.app`      |
 | Devnet  | USA    | `devnet-us.magicblock.app`      |
 | Devnet  | TEE    | `devnet-tee-as.magicblock.app`  |
+
+The router's `getRoutes` and `getDelegationStatus` name the TEE endpoints `mainnet-tee.magicblock.app`
+and `devnet-tee.magicblock.app`; the status API keys the same servers as `*-tee-as`. Map a router
+`fqdn` to its status entry by region rather than looking the hostname up directly. Checked
+2026-11-13.
 
 Example:
 
@@ -82,22 +89,26 @@ that version line.
 > root `counter/anchor`, `private-counter/anchor`, and
 > `gachapon-example/programs/gachapon-example` use 1.0.2. Inspect the target example's `Cargo.toml` and
 > preserve its version line unless the task explicitly requests a migration.
+> Use `gachapon-example` only as an Anchor-version reference: its VRF callback trusts the hardcoded
+> legacy VRF identity, which is unsafe. See [vrf.md](vrf.md) for the `#[vrf_callback]` pattern.
 
-Example provenance verified in the `magicblock-engine-examples` working tree on **2026-07-22**
-(all active examples' Rust SDK pins updated to `0.16.2`; every example passes `cargo check`):
+Example provenance checked against `magicblock-engine-examples` `main` (`ad38f9b`) on **2026-11-13**.
+Active examples still pin Rust SDK `0.16.2`:
 
 | Exact example path | Rust SDK | TypeScript SDK |
 |---|---:|---:|
-| `spl-tokens/anchor` | `0.16.2` | root `0.14.3`; app `0.15.3` |
+| `spl-tokens/anchor` | `0.16.2` | root `0.16.2`; app `0.17.2` |
 | `magic-actions/anchor` | `0.16.2` | `0.14.3` |
 | `binary-prediction/anchor` | `0.16.2` | `0.14.3` |
 | `roll-dice/anchor` | `0.16.2` | app `0.14.3` |
+| `gasless-starter/anchor` | — | root `0.16.2`; app `0.17.3` |
 
-These are working-example snapshots, not one mutually compatible version recommendation. The
-crates.io latest was `0.16.2` on **2026-07-22** and the Rust snippets in this skill use that
-verified snapshot; the npm latest was `0.16.1`, and the TypeScript snippets remain on the
-separately verified `0.15.5` snapshot, except the Ephemeral SPL Token reference, which uses `0.17.3`
-(npm latest on **2026-10-20**; its Magic ATA helpers need ≥ `0.17.1`). Preserve a target repo's version line unless upgrading it
+These are working-example snapshots, not one mutually compatible version recommendation. Because
+the examples are on Rust `0.16.2`, they use 0.16 API names (for example
+`create_request_scoped_randomness_ix`); the snippets in this skill use the `0.17.3` names. Registry
+latest on **2026-11-13**: crates.io `ephemeral-rollups-sdk` `0.17.3` and npm
+`@magicblock-labs/ephemeral-rollups-sdk` `0.17.3` (both released 2026-09-24). Rust and TypeScript
+snippets in this skill use `0.17.3`. Preserve a target repo's version line unless upgrading it
 explicitly.
 
 ## Key Program IDs
@@ -112,13 +123,15 @@ explicitly.
 | VRF Program              | `Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz`  |
 | Ephemeral SPL Token      | `SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2`  |
 | Pricing Oracle           | `PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd`  |
+| Hydra (base crank)       | `Hydra17i1feui9deaxu6d1TzSQMRNHeBRkDR1Awy7zea` |
+| Hydra (ephemeral crank)  | `eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf`  |
 | Localnet Validator       | `mAGicPQYBMvcYveUZA5F5UNNwyHvfYh5xkLS2Fr1mev`  |
 
 Prefer the SDK constants over hardcoding these where available:
 `ephemeral_rollups_sdk::consts::PERMISSION_PROGRAM_ID`,
 `ephemeral_rollups_sdk::consts::ESPL_TOKEN_PROGRAM_ID`,
 `ephemeral_rollups_sdk::vrf::consts::VRF_PROGRAM_ID` (and `DEFAULT_QUEUE`,
-`DEFAULT_EPHEMERAL_QUEUE`).
+`DEFAULT_EPHEMERAL_QUEUE`; the `vrf` module needs the SDK's `vrf` feature).
 
 ## VRF Oracle Queues
 
@@ -142,36 +155,40 @@ from Devnet.
 
 ## Rust Dependencies Snapshot
 
-Rust snapshot verified **2026-07-22** against crates.io (`0.16.2`); the TypeScript snapshot
-remains `0.15.5` (npm latest was `0.16.1`). Re-check before calling it latest:
+Rust and TypeScript snapshots verified **2026-11-13** against crates.io and npm (`0.17.3`). Re-check
+before calling it latest:
 
 ```bash
-cargo info ephemeral-rollups-sdk@0.16.2
-npm view @magicblock-labs/ephemeral-rollups-sdk@0.15.5 version
+cargo info ephemeral-rollups-sdk@0.17.3
+npm view @magicblock-labs/ephemeral-rollups-sdk@0.17.3 version
 git ls-remote --tags \
   https://github.com/magicblock-labs/ephemeral-rollups-sdk.git \
-  "refs/tags/v0.16.*"
+  "refs/tags/v0.17.*"
 ```
 
 ```toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }
 
 # Feature flag picks the Anchor line:
 #   "anchor"        → Anchor 1.x
-#   "anchor-compat" → Anchor >=0.28,<1.0
-# Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
-
-# For cranks
-magicblock-magic-program-api = { version = "0.10.1", default-features = false }
-bincode = "^1.3"
-sha2 = "0.10"
-
-# For VRF, enable the SDK's scoped VRF API
-# ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "vrf"] }
+#   "anchor-compat" → Anchor >=0.28,<1.0 (open SDK PR #317 removes it)
+# Product features are opt-in:
+#   "access-control" → Private Ephemeral Rollups (PER) permissions
+#   "spl"            → Ephemeral SPL Token builders and Magic ATA helpers
+#   "vrf"            → VRF request/callback API (ephemeral_rollups_sdk::vrf)
+#   "crank"          → crank CPIs, including Hydra (ephemeral_rollups_sdk::crank)
+# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "vrf"] }
+# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "crank"] }
 ```
+
+SDK `0.17.3` depends on `magicblock-magic-program-api` `0.10.1` and
+`magicblock-delegation-program-api` `3.1.0`, even though crates.io has `1.1.1` and `4.0.1`. Do not
+add a direct `magicblock-magic-program-api` dependency for cranks; use the SDK `crank` feature (see
+[cranks.md](cranks.md)). Do not read fee values from the SDK's re-exported `dlp_api::consts`; they
+are the pre-10x values (see [fees-and-commit-economics.md](fees-and-commit-economics.md)).
 
 For a real repo, keep its existing compatible version line unless doing an
 explicit migration.
@@ -182,17 +199,21 @@ explicit migration.
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3"
   }
 }
 ```
 
-Additional product/tool snapshots verified **2026-07-15**; re-check before installation:
+`@magicblock-labs/ephemeral-rollups-kit` is the same SDK for `@solana/kit` codebases, released at
+the same version. See [typescript-setup.md](typescript-setup.md) before choosing it.
+
+Additional product/tool snapshots verified **2026-11-13**; re-check before installation:
 
 | Package | Snapshot | Context |
 |---|---:|---|
-| `@magicblock-labs/ephemeral-validator` | `0.13.7` | Local validator/stack binaries |
-| `@magicblock-labs/magicsvm` | `0.1.1` | Fast in-process testing when the target repo has a verified setup |
+| `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries (matches public ERs) |
+| `@magicblock-labs/magicsvm` | `0.2.1` | Fast in-process ER lifecycle tests; see [local-development.md](local-development.md) |
+| `hydra-api` (crate) | `0.2.1` | Hydra crank API, re-exported by the SDK `crank` feature |
 | `@magicblock-labs/gum-sdk` | `^3.0.10` | Session Keys client in the current binary-prediction example |
 | Rust `session-keys` | `=3.1.1` | Session token validation in the current binary-prediction example |
 
@@ -215,6 +236,9 @@ Additional product/tool snapshots verified **2026-07-15**; re-check before insta
 - [Ephemeral Accounts guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/introduction/ephemeral-accounts)
 - [Local development guide](https://docs.magicblock.gg/pages/ephemeral-rollups-ers/how-to-guide/local-development)
 - [MagicBlock Validator](https://github.com/magicblock-labs/magicblock-validator)
+- [Hydra (permissionless crank)](https://github.com/magicblock-labs/hydra)
+- [Solana VRF](https://github.com/magicblock-labs/solana-vrf) and [VRF guide](https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/solana-vrf)
+- [magicsvm (npm)](https://www.npmjs.com/package/@magicblock-labs/magicsvm)
 - [Ephemeral Rollups SDK (Rust)](https://crates.io/crates/ephemeral-rollups-sdk)
 - [Ephemeral Rollups SDK source](https://github.com/magicblock-labs/ephemeral-rollups-sdk) — use the tag matching your pinned version
 - [NPM Package](https://www.npmjs.com/package/@magicblock-labs/ephemeral-rollups-sdk)

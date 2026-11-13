@@ -2,7 +2,7 @@
 
 ## Dependencies
 
-SDK version example, verified 2026-07-13. Keep the target repo's existing
+SDK version example, verified 2026-11-13 against npm `0.17.3`. Keep the target repo's existing
 compatible package line unless the task is an explicit migration; see
 [resources.md](resources.md).
 
@@ -10,10 +10,26 @@ compatible package line unless the task is an explicit migration; see
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.15.5"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3"
   }
 }
 ```
+
+Changes from `0.15.x` to `0.17.3` in this package are additive: Magic ATA helpers, lookup-table size
+calculation, and an optional `template` argument on `getAuthToken` (it must contain `{timestamp}`;
+the TEE also requires `{pubkey}`). The package still depends on `@solana/web3.js ^1.98.0`.
+
+### `@solana/kit` codebases
+
+`@magicblock-labs/ephemeral-rollups-kit` is the `@solana/kit` 4.x flavour of this SDK, published with
+the same version numbers (latest `0.17.3`). It is not a drop-in replacement: `Connection.create(...)`
+is async, and its `sendTransaction` defaults to `skipPreflight: true`, so pass
+`skipPreflight: false` to keep preflight. As of 2026-11-13, fixes for escrow PDA derivation
+(escrow top-ups fail with `InvalidSeeds`, PR #310), the `schedulePrivateTransfer` layout (fails with
+`NotEnoughAccountKeys`, PR #311), and router writable-account lists that omit the fee payer (PR #308)
+are open and unreleased. Keep the web3.js package for
+Anchor TypeScript clients, which use web3.js anyway; use the kit package only in a codebase that is
+already on `@solana/kit`, and avoid those three paths until a release includes the fixes.
 
 ## Imports
 
@@ -159,6 +175,12 @@ const txHash = await erProvider.sendAndConfirm(tx, []);
 const commitTxHash = await GetCommitmentSignature(txHash, erConnection);
 await baseConnection.confirmTransaction(commitTxHash, "confirmed");
 ```
+
+Since `0.17.1`, `GetCommitmentSignature` throws `Transaction failed; commitment was not scheduled`
+when the ER transaction errored, instead of returning a signature from an earlier instruction's
+log. Base settlement transactions are v1 transactions, and validator 2.0 changes the commit log
+format; see the `GetCommitmentSignature` notes in
+[delegation.md](delegation.md#implementation-checklist) before fetching or parsing them.
 
 ## Key Program IDs
 

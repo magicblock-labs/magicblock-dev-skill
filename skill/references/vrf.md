@@ -19,21 +19,34 @@ updates state.
 
 ## Dependencies
 
-In the SDK v0.16.2 snapshot verified 2026-07-22, VRF is exposed through the
-main SDK. Enable its `vrf` feature; Anchor programs using this snapshot do not
-need a direct `ephemeral-vrf-sdk` dependency.
-
-The `magicblock-engine-examples/roll-dice/anchor` example pins Rust SDK `0.16.2` (as of the
-2026-07-22 working tree) and app TypeScript SDK `0.14.3`. Treat those as example provenance, not as
-the dependency version for the `0.16.2` snippets below.
+In the SDK v0.17.3 snapshot verified 2026-11-13, VRF is exposed through the
+main SDK behind its `vrf` feature: `ephemeral_rollups_sdk::vrf` and
+`anchor::{vrf, vrf_callback}` do not exist without it. Anchor programs do not need a direct
+`ephemeral-vrf-sdk` dependency (the SDK re-exports `ephemeral-vrf-sdk` at the same version).
 
 ```toml
 [dependencies]
-ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "vrf"] }
+ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "vrf"] }
 ```
 
 Use the scoped API below: `ephemeral_rollups_sdk::vrf`,
-`create_request_scoped_randomness_ix`, `#[vrf]`, and `#[vrf_callback]`.
+`create_request_randomness_ix`, `#[vrf]`, and `#[vrf_callback]`.
+
+**The request function names swapped in SDK 0.17.0.** In 0.16.x, `create_request_randomness_ix` was
+the deprecated *legacy global-identity* request and `create_request_scoped_randomness_ix` was the
+scoped one. In 0.17.x, `create_request_scoped_randomness_ix` is removed, `create_request_randomness_ix`
+is the *scoped* regular-priority request, and the legacy global-identity request is
+`create_request_legacy_randomness_ix` (deprecated). Code that called `create_request_randomness_ix`
+on 0.16 compiles on 0.17 but switches to the scoped identity, so its callback must validate the scoped
+identity (`#[vrf_callback]`). `create_request_high_priority_scoped_randomness_ix` is unchanged.
+Unreleased SDK `main` (PR #301) deprecates `create_request_randomness_ix` in favour of
+`create_request_randomness_ix_const`; it is not in 0.17.3.
+
+Reference example: `magicblock-engine-examples/rewards-delegated-vrf/anchor`
+(`create_request_high_priority_scoped_randomness_ix` with `#[vrf_callback]`). Do not copy the VRF
+callback in `gachapon-example` or `00-LEGACY_EXAMPLES/roll-dice`: both trust the hardcoded legacy
+global identity `9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`, the pattern fixed as exploitable in
+`rewards-delegated-vrf` (examples PR #134).
 
 ## Imports
 
@@ -42,7 +55,7 @@ use ephemeral_rollups_sdk::{
     anchor::{vrf, vrf_callback},
     vrf::{
         self,
-        instructions::{create_request_scoped_randomness_ix, RequestRandomnessParams},
+        instructions::{create_request_randomness_ix, RequestRandomnessParams},
         types::SerializableAccountMeta,
     },
 };
@@ -52,7 +65,7 @@ use ephemeral_rollups_sdk::{
 
 ```rust
 pub fn roll_dice(ctx: Context<DoRollDiceCtx>, client_seed: u8) -> Result<()> {
-    let ix = create_request_scoped_randomness_ix(RequestRandomnessParams {
+    let ix = create_request_randomness_ix(RequestRandomnessParams {
         payer: ctx.accounts.payer.key(),
         oracle_queue: ctx.accounts.oracle_queue.key(),
         callback_program_id: ID,
@@ -168,6 +181,22 @@ Pinocchio `roll-dice` example in the engine examples repo.
 
 ## Request Lifecycle and Recovery
 
+Program behaviour, verified 2026-11-13 against SolanaVrf v1.0 (`solana-vrf` commit `4c6c97d`, the
+build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged):
+
+- A request expires `QUEUE_TTL_SECONDS` = 120 seconds of wall-clock time after its own creation
+  timestamp. Expired requests are purged and their fee goes to the oracle; there is no refund. Fees
+  are `VRF_LAMPORTS_COST` 500,000 lamports (regular) and `VRF_HIGH_PRIORITY_LAMPORTS_COST` 800,000
+  (high priority); the delegated ephemeral queue is fee-exempt.
+- A paused queue rejects new requests with `QueuePaused` (custom error `15`).
+- The callback is rejected if any callback account is a program (executable, or owned by a BPF or
+  native loader) unless it is on the allowlist: System, Token, Token-2022, Associated Token,
+  Metaplex Token Metadata, MPL Core, Delegation, and Magic programs. Pass other programs' data
+  accounts, not the programs themselves.
+
+So a "timed out" request is final after 120 seconds: never wait longer for its callback, and let the
+user retry with a new request.
+
 Persist enough state to correlate one request with one permitted callback. Use this state machine:
 
 `idle → requested(request identity/nonce) → fulfilled` with an explicit timeout/retry or cancel path.
@@ -198,3 +227,8 @@ requests, timeout, late callback after retry, callback program error, wrong queu
 - `caller_seed` adds client-side entropy; `callback_args` forwards extra data to the callback.
 - Treat request acceptance and callback fulfillment as separate observable states.
 - Bind one callback to one request and make its economic effects idempotent.
+- Requests expire after 120 seconds with no refund; program accounts in the callback list are
+  rejected unless allowlisted.
+
+Docs: [Solana VRF](https://docs.magicblock.gg/pages/verifiable-randomness-functions-vrfs/introduction/solana-vrf)
+(the older `why-verifiable-randomness-onchain` URL redirects there).
