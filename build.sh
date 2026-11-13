@@ -478,7 +478,7 @@ build_cursor() {
     {
         cat <<'EOF'
 ---
-description: Design, implement, and debug products with MagicBlock on Solana — ER/PER architecture, delegation and settlement, Pricing Oracle, Session Keys, Ephemeral Accounts, Magic Actions, Cranks, VRF, eSPL, private payments, and validation.
+description: Build and debug MagicBlock apps on Solana. Covers Ephemeral Rollups for gasless, real-time, low-latency, high-frequency transactions (games, trading, payments, social); private execution and private SPL payments (PER/TEE); verifiable randomness (VRF); price feeds; cranks and scheduled tasks; session keys; and delegate, commit, and undelegate flows. Use when a Solana app needs gasless or high-throughput transactions, an onchain game, private or confidential transfers, onchain randomness, or automation, even if MagicBlock is not named. Also use for MagicBlock integration, settlement, and production troubleshooting.
 globs:
 alwaysApply: false
 ---
