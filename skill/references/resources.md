@@ -212,7 +212,7 @@ Additional product/tool snapshots verified **2026-11-13**; re-check before insta
 | Package | Snapshot | Context |
 |---|---:|---|
 | `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries (matches public ERs) |
-| `@magicblock-labs/magicsvm` | `0.2.1` | Fast in-process ER lifecycle tests; see [local-development.md](local-development.md) |
+| `@magicblock-labs/magicsvm` (npm), `magicsvm` (crate) | `0.3.0` (2026-11-18) | Fast in-process ER lifecycle, crank, and VRF-callback tests; see [local-development.md](local-development.md#magicsvm) |
 | `hydra-api` (crate) | `0.2.1` | Hydra crank API, re-exported by the SDK `crank` feature |
 | `@magicblock-labs/gum-sdk` | `^3.0.10` | Session Keys client in the current binary-prediction example |
 | Rust `session-keys` | `=3.1.1` | Session token validation in the current binary-prediction example |

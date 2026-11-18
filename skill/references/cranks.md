@@ -165,6 +165,13 @@ Test:
 Working example: `magicblock-engine-examples/crank-counter/anchor`. It demonstrates scheduling and
 execution with a deliberately permissionless `increment`; add the lifecycle and failure tests above.
 
+MagicSVM `0.3.0` runs this `1.1.1` model in process: `ScheduleTask`/`CancelTask` with the validator's
+validation, executions on their millisecond deadlines in `warp_to_slot`, retries with the validator's
+backoff, same-ID replacement, and ignored reschedule/cancel from another authority. Use it for the
+checklist items above that don't need a live scheduler (see
+[local-development.md](local-development.md#magicsvm) and the example's `tests-magicsvm-rs/`); it does
+not model Hydra or validator 2.0.
+
 Pinned scheduler source (validator `v1.1.1`, the live version; `master` is now the 2.0 line):
 [inner signer validation](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/programs/magicblock/src/schedule_task/mod.rs) and
 [scheduled execution](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/programs/magicblock/src/schedule_task/process_execute_task.rs).

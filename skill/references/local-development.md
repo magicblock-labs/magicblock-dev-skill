@@ -10,9 +10,9 @@ callbacks, cranks, Magic Actions, or hosted payment services.
 |---|---|
 | Pure instruction math and account constraints | Solana program test/LiteSVM/Mollusk where compatible |
 | Base initialization and ordinary SPL behavior | Local Solana validator |
-| Delegation, ER writes, commit, undelegate, Ephemeral Accounts | Local MagicBlock stack or Devnet |
+| Delegation, ER writes, commit, undelegate, Ephemeral Accounts | MagicSVM first; local MagicBlock stack or Devnet for live propagation |
 | Router discovery and live multi-endpoint propagation | Devnet |
-| Crank execution, VRF callback, Magic Action delivery | Environment running those services; Devnet for integration confidence |
+| Crank execution, VRF callback, Magic Action delivery | MagicSVM `0.3.0` for program logic (validator `1.1.1` `ScheduleTask` cranks, VRF callbacks, post-commit actions); Devnet for live service delivery |
 | PER confidentiality/authorization boundary | TEE-backed PER environment |
 | Hosted Private Payments API behavior | The actual API environment or its repository's supported local service setup |
 
@@ -55,20 +55,87 @@ Limitations:
 - A base validator plus ER does not automatically prove router, VRF, PER, or hosted API behavior.
 - RPC URLs, validator identity, websocket URLs, and program deployments must agree across the test.
 
-`magicsvm` (`@magicblock-labs/magicsvm` on npm, `magicsvm` crate; `0.2.1` verified 2026-11-13) runs a
-base ledger and an ephemeral ledger in process. It executes the real Delegation Program and Magic
-program paths for delegate, `ScheduleCommit`, `ScheduleCommitAndUndelegate`, `ScheduleCommitFinalize`,
-`ScheduleBaseIntent`, and `ScheduleIntentBundle`, including post-delegation actions, Ephemeral Account
-create/resize/close, eATA projection, and permission-gated reads (Rust
-`get_account_for(target, &pubkey)` returns a `StockAccount` and hides private accounts unless the
-`authorized_user` is a permission member). That makes it a good fast test for the ER account
-lifecycle.
+## MagicSVM
 
-It does not cover `ScheduleTask`/`CancelTask` (cranks), action callbacks, VRF, the router, fees, the
-fee vault, or commit limits; ER transactions are fee-free in it. It pins old dependencies
-(`ephemeral-rollups-sdk` `0.14.4`, `magicblock-magic-program-api` `0.8.8`), so check that the target
-program's SDK line works with it. It is not evidence that live routing, service scheduling, TEE privacy,
+`magicsvm` (`@magicblock-labs/magicsvm` on npm, `magicsvm` crate; `0.3.0` verified 2026-11-18) runs a
+base ledger and an ephemeral ledger in one process: no validators, no network, and tests that finish in
+milliseconds. It executes the real Delegation Program and Magic program paths for delegate,
+`ScheduleCommit`, `ScheduleCommitAndUndelegate`, `ScheduleCommitFinalize`, `ScheduleBaseIntent`, and
+`ScheduleIntentBundle`, including post-delegation actions and post-commit actions (intent-bundle actions
+run through DLP `CallHandlerV2` with `source_program`, legacy `ScheduleBaseIntent` actions through
+`CallHandler`), Ephemeral Account create/resize/close with sponsor rent moved to and from the ephemeral
+vault, eATA projection, the delegated magic fee vault, and permission-gated reads (Rust
+`get_account_for(target, &pubkey)` hides private accounts unless `set_authorized_user` names a
+permission member).
+
+Since `0.3.0` it also runs:
+
+- **VRF.** A stand-in for the VRF program (`Vrf1RNUj…`) with the default and test queues on both
+  ledgers validates requests like `solana-vrf` and fulfills each one in the slot after the request,
+  through the program's callback with the VRF identity as account 0. Fulfillments run in
+  `warp_to_slot`; `set_vrf_randomness` pins the value. It doesn't model VRF proofs, queue contents, or
+  the oracle being paid.
+- **Cranks.** The Magic program accepts `ScheduleTask` and `CancelTask` with validator `1.1.1`
+  validation, and `warp_to_slot` runs due tasks on their millisecond deadlines (50 ms slots) through
+  the `Crank111…` executor with the crank signer PDA, using the validator's retry backoff. This is the
+  live `1.1.1` model, not Hydra or validator 2.0.
+
+`warp_to_slot` returns the results of the VRF fulfillments and crank runs it executed, in order. Base
+transactions pay normal fees; ER transactions are fee-free.
+
+It does not cover the router, commit limits or fee charging, Hydra cranks, the real VRF oracle, TEE
+attestation, or cross-layer timing. Programs are loaded from their compiled `.so`, so they can use any
+SDK version; MagicSVM's own crate pins `ephemeral-rollups-sdk` `0.14.4`, which only matters if the test
+crate shares SDK types with it. It is not evidence that live routing, service scheduling, TEE privacy,
 or cross-layer propagation works.
+
+### Writing a MagicSVM test
+
+The Rust API (`cargo add --dev magicsvm@0.3.0`), in the order a test uses it:
+
+```rust
+use magicsvm::{MagicSVM, TransactionTarget};
+
+let mut svm = MagicSVM::new();
+svm.add_program_from_file(program_id, "target/deploy/my_program.so").unwrap();
+svm.airdrop(&payer.pubkey(), 2_000_000_000).unwrap();
+let validator = svm.validator_identity(); // delegate to this validator
+
+// Initialize and delegate on base, then write on the ER.
+svm.send_transaction_to(TransactionTarget::Base, init_and_delegate_tx).unwrap();
+let tx = Transaction::new(&[&payer], message, svm.latest_blockhash_for(TransactionTarget::Ephemeral));
+svm.send_transaction_to(TransactionTarget::Ephemeral, tx).unwrap();
+svm.expire_blockhash_for(TransactionTarget::Ephemeral); // before resending identical bytes
+
+// Read either ledger. A commit or undelegate is visible on base right after the ER transaction.
+let account = svm.get_account_for(TransactionTarget::Base, &counter);
+
+// Run the VRF callbacks and crank executions due up to a slot; VRF requests are
+// fulfilled in the slot after the request.
+let results = svm.warp_to_slot(request_slot + 1);
+```
+
+Failed transactions return `Err(FailedTransactionMetadata)`; assert on `failed.err` (for example
+`TransactionError::InstructionError(0, InstructionError::Custom(2001))` for Anchor `ConstraintHasOne`)
+rather than only on `is_err()`.
+
+Working suites live in [magicblock-engine-examples](https://github.com/magicblock-labs/magicblock-engine-examples),
+one `tests-magicsvm-rs/` crate per example with shared helpers in `test-utils/rust`:
+`counter/anchor` (delegate, commit, undelegate), `crank-counter/anchor` (cranks), `roll-dice` and
+`rewards-delegated-vrf/anchor` (VRF), `private-counter` and `sealed-auction/anchor` (PER privacy),
+`spl-tokens/anchor` and `gasless-starter/anchor` (eATA deposits and fee-free ER transactions),
+`magic-actions/anchor` (post-commit actions), and `ephemeral-account-chats/anchor` (Ephemeral
+Accounts).
+
+Pitfalls:
+
+- MagicSVM needs a newer Rust than the 1.89 toolchain Anchor uses for program builds; run the suite
+  with `cargo +stable test`.
+- Build the program with `anchor build --ignore-keys` (or a pinned `anchor_version`); `anchor keys sync`
+  rewrites `declare_id!` to a local keypair.
+- A test crate that depends on an Anchor program with `no-entrypoint` can resolve newer
+  `anchor-derive-*`/`anchor-syn` crates than the program's own `anchor-lang`, and fail to compile (for
+  example on `create_account_allow_prefund`). Seed the test crate's `Cargo.lock` from the program's.
 
 ## Repeatable workflow
 

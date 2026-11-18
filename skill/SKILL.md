@@ -256,7 +256,7 @@ When you implement changes, provide:
 - Pricing Oracle (feed identity, freshness, and safe consumption): [pricing-oracle.md](references/pricing-oracle.md)
 - Session Keys (scoped temporary authority): [session-keys.md](references/session-keys.md)
 - Private Payments API (incl. gasless, x402/MPP merchant checkouts, live-feature status): [private-payments.md](references/private-payments.md)
-- Local development and environment-specific validation: [local-development.md](references/local-development.md)
+- Local development, in-process MagicSVM tests (ER lifecycle, cranks, VRF callbacks), and environment-specific validation: [local-development.md](references/local-development.md)
 - Reference links & versions: [resources.md](references/resources.md)
 
 ## Terminal Self-Heal Proposal
