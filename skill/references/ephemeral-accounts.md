@@ -95,9 +95,10 @@ underfunding, unauthorized mutation, close/refund, and the loss boundary. Valida
 ordinary Solana test validators do not prove ER-only lifecycle behavior.
 
 `magicsvm` `0.3.0` processes `CreateEphemeralAccount`, `ResizeEphemeralAccount`, and
-`CloseEphemeralAccount`, moving the sponsor's rent into the ephemeral vault on create and resize and
-back on close, so create/resize/close logic, sponsor underfunding, and the refund can be covered in fast
-in-process tests (see [local-development.md](local-development.md#magicsvm)). The loss boundary and
+`CloseEphemeralAccount` and moves rent between the sponsor and the ephemeral vault like the validator:
+the sponsor pays the rent on create and on a resize that grows the account, and receives the difference
+on a resize that shrinks it and the remaining rent on close. Create/resize/close logic, sponsor
+underfunding, and both refunds can be covered in fast in-process tests (see [local-development.md](local-development.md#magicsvm)). The loss boundary and
 live commit behavior still need a live ER.
 
 Open SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magic` field marker,
