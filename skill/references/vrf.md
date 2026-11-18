@@ -223,6 +223,13 @@ transactions and expose a product state such as “randomness pending” rather 
 Validate the request path, authenticated callback, spoofed callback, duplicate callback, two concurrent
 requests, timeout, late callback after retry, callback program error, wrong queue/runtime, and recovery.
 
+MagicSVM `0.3.0` covers the request and callback paths in process: its VRF program accepts requests on
+the default and test queues, charges the base-queue fee, and fulfills each request in the slot after it
+through `warp_to_slot`, with the VRF identity as account 0 and the legacy callback allow-list;
+`set_vrf_randomness` pins the value. See [local-development.md](local-development.md#magicsvm) and the
+`roll-dice` and `rewards-delegated-vrf` examples' `tests-magicsvm-rs/`. It doesn't model proofs, purging,
+or the real oracle, so keep a Devnet check for those.
+
 ## Key Points
 
 - VRF provides cryptographically verifiable randomness.
