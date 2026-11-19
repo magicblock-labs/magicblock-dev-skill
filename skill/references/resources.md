@@ -105,11 +105,26 @@ Active examples still pin Rust SDK `0.16.2`:
 
 These are working-example snapshots, not one mutually compatible version recommendation. Because
 the examples are on Rust `0.16.2`, they use 0.16 API names (for example
-`create_request_scoped_randomness_ix`); the snippets in this skill use the `0.17.3` names. Registry
-latest on **2026-11-13**: crates.io `ephemeral-rollups-sdk` `0.17.3` and npm
-`@magicblock-labs/ephemeral-rollups-sdk` `0.17.3` (both released 2026-09-24). Rust and TypeScript
-snippets in this skill use `0.17.3`. Preserve a target repo's version line unless upgrading it
-explicitly.
+`create_request_scoped_randomness_ix`); the snippets in this skill use the 0.17+ names. Rust and
+TypeScript snippets in this skill pin `0.18.0`. Preserve a target repo's version line unless upgrading
+it explicitly.
+
+## SDK lines
+
+Registries on **2026-11-19**: crates.io and npm `latest` are `0.20.0` (2026-11-16), the validator
+2.0 line. `0.18.0` (2026-11-18, npm dist-tag `legacy`) supports validator 1.x and 2.0. `cargo add`
+without a version and npm `@latest` therefore install the 2.0 line, while every public ER except
+devnet-us runs 1.x.
+
+| Line | Validators | Notes |
+|---|---|---|
+| `0.17.x` | 1.x | `GetCommitmentSignature` throws on 2.0 (devnet-us) logs |
+| `0.18.x` | 1.x and 2.0 | Pin for the public ERs. Works with Anchor 1.0.2; keeps `anchor-compat`. Deprecates `create_request_randomness_ix` in favour of `_const`. Ships #307 (receipt permission pair on queued transfers) |
+| `0.20.x` | 2.0 only | anchor-lang ≥ 1.2.2, `magicblock-magic-program-api` `2.0.0`, no `anchor-compat` / `backward-compat` (#317), kit `@solana/kit ^8`. Rust `#[vrf]` fails to compile (`E0433 cannot find slot_hashes in sysvar`). TS `GetCommitmentSignature` throws on 1.x logs. Ships #313 (Magic Accounts names) |
+
+With SDK 0.20, an exact `anchor-lang = "=1.0.2"` fails to resolve, and a caret `"1.0.2"` silently
+resolves anchor-lang 1.2.2. Whether 0.20's Rust CPIs work against a 1.x ER is untested. SDK #307,
+#313, and #317 are released.
 
 ## Key Program IDs
 
@@ -155,37 +170,37 @@ from Devnet.
 
 ## Rust Dependencies Snapshot
 
-Rust and TypeScript snapshots verified **2026-11-13** against crates.io and npm (`0.17.3`). Re-check
-before calling it latest:
+Rust and TypeScript snapshots verified **2026-11-19** against crates.io and npm (`0.18.0`, the 1.x +
+2.0 line; see [SDK lines](#sdk-lines)). Re-check before pinning:
 
 ```bash
-cargo info ephemeral-rollups-sdk@0.17.3
-npm view @magicblock-labs/ephemeral-rollups-sdk@0.17.3 version
+cargo info ephemeral-rollups-sdk@0.18.0
+npm view @magicblock-labs/ephemeral-rollups-sdk dist-tags
 git ls-remote --tags \
   https://github.com/magicblock-labs/ephemeral-rollups-sdk.git \
-  "refs/tags/v0.17.*"
+  "refs/tags/v0.18.*"
 ```
 
 ```toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor"] }
 
 # Feature flag picks the Anchor line:
 #   "anchor"        → Anchor 1.x
-#   "anchor-compat" → Anchor >=0.28,<1.0 (open SDK PR #317 removes it)
+#   "anchor-compat" → Anchor >=0.28,<1.0 (removed in 0.20.0, #317)
 # Product features are opt-in:
 #   "access-control" → Private Ephemeral Rollups (PER) permissions
 #   "spl"            → Ephemeral SPL Token builders and Magic ATA helpers
 #   "vrf"            → VRF request/callback API (ephemeral_rollups_sdk::vrf)
 #   "crank"          → crank CPIs, including Hydra (ephemeral_rollups_sdk::crank)
-# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "access-control"] }
-# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "vrf"] }
-# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "crank"] }
+# ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "vrf"] }
+# ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "crank"] }
 ```
 
-SDK `0.17.3` depends on `magicblock-magic-program-api` `0.10.1` and
-`magicblock-delegation-program-api` `3.1.0`, even though crates.io has `1.1.1` and `4.0.1`. Do not
+SDK `0.18.0` (like `0.17.3`) depends on `magicblock-magic-program-api` `0.10.1` and
+`magicblock-delegation-program-api` `3.1.0`, even though crates.io has `2.0.0` and `4.0.1`. Do not
 add a direct `magicblock-magic-program-api` dependency for cranks; use the SDK `crank` feature (see
 [cranks.md](cranks.md)). Do not read fee values from the SDK's re-exported `dlp_api::consts`; they
 are the pre-10x values (see [fees-and-commit-economics.md](fees-and-commit-economics.md)).
@@ -199,19 +214,20 @@ explicit migration.
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0"
   }
 }
 ```
 
 `@magicblock-labs/ephemeral-rollups-kit` is the same SDK for `@solana/kit` codebases, released at
-the same version. See [typescript-setup.md](typescript-setup.md) before choosing it.
+the same version. From `0.18.0` it needs `@solana/kit ^8` (0.17.x used `^4`). See
+[typescript-setup.md](typescript-setup.md) before choosing it.
 
 Additional product/tool snapshots verified **2026-11-13**; re-check before installation:
 
 | Package | Snapshot | Context |
 |---|---:|---|
-| `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries (matches public ERs) |
+| `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries for the 1.x line that every public ER except devnet-us runs. npm `latest` is `2.0.1` (checked 2026-11-19) |
 | `@magicblock-labs/magicsvm` (npm), `magicsvm` (crate) | `0.3.0` (2026-11-18) | Fast in-process ER lifecycle, crank, and VRF-callback tests; see [local-development.md](local-development.md#magicsvm) |
 | `hydra-api` (crate) | `0.2.1` | Hydra crank API, re-exported by the SDK `crank` feature |
 | `@magicblock-labs/gum-sdk` | `^3.0.10` | Session Keys client in the current binary-prediction example |

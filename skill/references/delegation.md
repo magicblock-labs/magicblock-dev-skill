@@ -4,25 +4,26 @@
 
 ### Dependencies
 
-SDK version example, verified 2026-11-13 against crates.io `0.17.3`. Before
-changing a real project, inspect its existing manifests and
-[resources.md](resources.md); keep the project's versions unless the task
-explicitly requests an upgrade.
+SDK version example, verified 2026-11-19 against crates.io `0.18.0`, the line that supports
+validator 1.x and 2.0. crates.io latest `0.20.0` is the 2.0-only line, so `cargo add` without a
+version is wrong for the public ERs; see [resources.md](resources.md#sdk-lines). Before changing a
+real project, inspect its existing manifests; keep the project's versions unless the task explicitly
+requests an upgrade.
 
 ```toml
 # Cargo.toml
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
-ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor"] }
 
 # Anchor line is selected by the SDK feature flag:
 #   "anchor"        → Anchor 1.x
-#   "anchor-compat" → Anchor >=0.28,<1.0
+#   "anchor-compat" → Anchor >=0.28,<1.0 (0.18.x and earlier)
 # Add the access-control feature for Private Ephemeral Rollups (PER)
-# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "access-control"] }
+# ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "access-control"] }
 ```
 
-SDK `0.17.3` feature flags:
+SDK `0.18.0` feature flags (`0.17.3` has the same set without `magic-accounts`):
 
 | Feature | Enables |
 |---|---|
@@ -36,11 +37,12 @@ SDK `0.17.3` feature flags:
 | `vrf` | `vrf` module, `anchor::{vrf, vrf_callback}` |
 | `crank` | `crank` module (Hydra crank CPIs plus the deprecated legacy scheduling CPIs) |
 | `anchor-debug` | Anchor debug logging |
+| `magic-accounts` | `magic_accounts` module (0.18.0; pulls `magicblock-magic-program-api` `2.0.0`) |
 
 Without a compatibility flag the SDK targets Solana 3.0. Do not combine `anchor` with
-`anchor-compat` or `backward-compat`; that fails at compile time. Open SDK PR #317 removes
-`anchor-compat` and `backward-compat` (Anchor ≥1.0 only). It is unreleased; check the target
-version's `Cargo.toml` before relying on either flag.
+`anchor-compat` or `backward-compat`; that fails at compile time. SDK `0.20.0` removed
+`anchor-compat` and `backward-compat` (#317) and requires anchor-lang ≥ 1.2.2; `0.18.x` keeps both.
+Check the target version's `Cargo.toml` before relying on either flag.
 
 ### Imports
 
@@ -143,8 +145,15 @@ pub struct Undelegate<'info> {
 
 For Private Ephemeral Rollups, delegate only the data PDA to the TEE validator on
 the base layer. After delegation, create its `EphemeralPermission` directly on
-the ER, then update or close it there as needed. There is no separate base-layer
+the ER, then update or close it there as needed. New code needs no separate base-layer
 permission account to create, delegate, commit, or undelegate.
+
+That is application guidance, not a protocol rule. The permission program still implements the
+legacy v1 base-layer permission (create, delegate, commit, undelegate), and the TEE still honors it:
+for v1, `members: None` is public and `Some([])` is private (verified on the deployed program and the
+query-filtering decision code, 2026-11-19). v1 and v2 share the PDA `[PERMISSION_SEED, account]`
+(permission-program source `5dc3748e`), so an account that still has a delegated v1 permission cannot
+get an `EphemeralPermission` until the v1 record is undelegated and closed.
 
 The delegated data PDA signs each permission CPI with its program seeds. It also
 pays the ephemeral permission rent, so pre-fund the data PDA during base-layer
@@ -185,8 +194,9 @@ const MAX_PERMISSION_MEMBERS: usize = 8;
 
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     transfer(
+        // Anchor 1.0.x: CpiContext::new takes the program key
         CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
+            ctx.accounts.system_program.key(),
             Transfer {
                 from: ctx.accounts.authority.to_account_info(),
                 to: ctx.accounts.my_account.to_account_info(),
@@ -402,7 +412,7 @@ when authority is stored elsewhere or controlled by a multisig. Never expose a
 PDA-signed permission CPI through an instruction that lacks application-level
 authorization.
 
-With the `access-control` feature, SDK `0.17.x` also exposes `anchor::PermissionProgram`, so
+With the `access-control` feature, SDK `0.17.x` and `0.18.x` also expose `anchor::PermissionProgram`, so
 `pub permission_program: Program<'info, PermissionProgram>` can replace the
 `UncheckedAccount` + `address = PERMISSION_PROGRAM_ID` pair.
 
@@ -425,8 +435,8 @@ instruction cannot run:
   must save the delegated account's data before the CPI and restore it afterwards.
 
 Both instructions are deployed on devnet and mainnet. Both clusters have run Delegation Program
-`0c551fa` since 2026-11-03 (executable hash verified). SDK `0.17.3` has no Anchor or CPI wrapper
-for them. With the `instruction` (or `spl`) feature it re-exports the dlp-api 3.1.0 builders
+`0c551fa` since 2026-11-03 (executable hash verified). SDK `0.17.3` and `0.18.0` have no Anchor or CPI wrapper
+for them. With the `instruction` (or `spl`) feature they re-export the dlp-api 3.1.0 builders
 `ephemeral_rollups_sdk::instruction_builder::{request_undelegation,
 undelegate_with_rollback_after_timeout}`; issue the resulting instruction by CPI with the
 delegated PDA's seeds.
@@ -479,13 +489,16 @@ must add `use ephemeral_rollups_sdk::ephem::FoldableIntentBuilder;` explicitly.
 
 ### PER permissions are ephemeral
 
-Do not create or delegate a base-layer permission account. Delegate the data PDA,
-then create, update, and close its `EphemeralPermission` on the ER. Pre-fund the
-data PDA for permission rent before delegation.
+For new code, do not create or delegate a base-layer permission account. Delegate
+the data PDA, then create, update, and close its `EphemeralPermission` on the ER.
+Pre-fund the data PDA for permission rent before delegation. A legacy v1 permission
+still works but occupies the same PDA; see
+[PER: ER-local permissions](#private-ephemeral-rollups-per-er-local-permissions).
 
 ### Accounts that cannot be committed
 
-The live validator (`1.1.1`) refuses to schedule a commit or commit-and-undelegate for:
+The live 1.x validators (`8886db2`, same as the `v1.1.1` tag here) refuse to schedule a commit or
+commit-and-undelegate for (2.0 has the same size check):
 
 - An account whose data is larger than 10,240 bytes (`MAX_PERMITTED_DATA_INCREASE`). The log reads
   `ScheduleCommit ERR: account <pubkey> is too large to be committed` and the instruction fails
@@ -501,9 +514,12 @@ commit-time errors.
 
 ### Required
 
-- Keep preflight enabled for supported base-layer transactions. Use
-  `skipPreflight: true` only when the selected ER path has a known simulation
-  incompatibility, and inspect the executed transaction logs afterward
+- Keep preflight enabled for supported base-layer transactions. On the ER, preflight
+  is not a simulation: with or without it, the transaction executes and is recorded
+  (a failure lands as a failed transaction). `skipPreflight: true` only makes
+  `sendTransaction` return before execution instead of returning the execution error.
+  If you skip it, check the ER signature status and logs (verified on `8886db2`,
+  2026-11-19)
 - Use dual connections - Base layer for delegate, ER for operations/undelegate
 - Verify delegation for routing/debugging - Query router status and compare the base and ER owners;
   do not use delegation itself as application authorization
@@ -511,7 +527,9 @@ commit-time errors.
   expected delegated or undelegated state. Use a bounded timeout and fail the test explicitly if the
   transition is not observed
 - Use `GetCommitmentSignature` to extract the base signature from ER logs, then
-  confirm that returned signature separately on the base connection. Base-layer settlement
+  confirm that returned signature separately on the base connection. Use the TS
+  SDK `0.18.x` helper: it reads both the 1.x log and the 2.0 outbox; 0.17.x
+  throws on 2.0 (devnet-us) and 0.20.x throws on every 1.x ER. Base-layer settlement
   transactions are already v1 transactions on devnet and mainnet (checked 2026-11-13), so fetch
   them with `maxSupportedTransactionVersion: 1`; a request with `0` fails with "Transaction version
   (1) is not supported". `@solana/web3.js` 1.98.4's `VersionedMessage.deserialize` rejects v1
@@ -519,15 +537,14 @@ commit-time errors.
   prefer a raw JSON-RPC call or confirming the signature status
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
-> **Validator 2.0 (release candidate, not live as of 2026-11-13).** The scheduling transaction
+> **Validator 2.0 (released; devnet-us runs `2.0.0` on 2026-11-19).** The scheduling transaction
 > logs `ScheduledCommitSent outbox: <address>` instead of
 > `ScheduledCommitSent signature: <sig>`. Find completion with `getSignaturesForAddress(outbox)`
-> then `getTransaction`. The released SDK's `GetCommitmentSignature` parses the old log and will
-> not read the new one until SDK issue #304 lands (open PR #309 adds
-> `waitForSettlement` / `waitForIntent`). Committed accounts must also be writable, including
-> when committing from inside another program (otherwise `ReadonlyDataModified`), and commit IDs
-> are reserved at scheduling time, so the commit limit and fee threshold count queued commits.
-> Check `getVersion` (`magicblock-core`) before relying on either behaviour.
+> then `getTransaction`; SDK `0.18.x` `GetCommitmentSignature` does this. Committed accounts must
+> also be writable, including when committing from inside another program (otherwise
+> `ReadonlyDataModified`), and commit IDs are reserved at scheduling time, so the commit limit and
+> fee threshold count queued commits. Check `getVersion` before relying on either behaviour: 2.0
+> reports `core`, 1.x reports `magicblock-core`.
 
 ### Avoid
 
@@ -539,7 +556,8 @@ commit-time errors.
 - Delegating accounts larger than 10,240 bytes; the validator cannot commit them
 - Omitting `#[commit]` from the undelegation context
 - Calling deprecated `commit_accounts` or `commit_and_undelegate_accounts`; use `MagicIntentBundleBuilder`
-- Creating or delegating a base-layer PER permission account; permissions are ER-local
+- Creating or delegating a base-layer PER permission account in new code; use the ER-local
+  `EphemeralPermission`
 
 ## Commit Limits & Fee Vault
 
@@ -547,22 +565,28 @@ Read [fees-and-commit-economics.md](fees-and-commit-economics.md) before estimat
 commits as free. The Delegation Program collects session and after-first-commit charges from delegation
 PDA deposits at undelegation, while the validator separately enforces live commit limits and fees.
 
-Without a delegated payer, the validator accepts ten plain commits and hard-fails the next one. When
-the limit is reached, you have two options:
+Without a delegated payer, the validator accepts commits 1–10 and rejects commit 11 with
+`0xA0000000`. This is a hard cap, not a soft quota. Commit-and-undelegate kinds are exempt so the
+account can exit; on the live `8886db2`, `commit_finalize` intents are capped too. You have two
+options:
 
-### Option 1: Re-delegate to refresh the quota
+### Option 1: Re-delegate to reset the count
 
-Undelegating and re-delegating the account resets its commit nonce. This fits flows that already cycle through
-delegation boundaries (session start → play → session end → next session).
-No fee-vault accounts or builder methods are required. Undelegation still settles the session and
-commit charges from the delegation PDAs before refunding the remainder to the recorded rent payer.
+Undelegating and re-delegating the account resets its commit nonce, so the next delegation can commit
+ten more times. This fits flows that already cycle through delegation boundaries (session start →
+play → session end → next session), and needs no fee-vault accounts or builder methods. It does not
+make commits free: each undelegation charges the 3,000,000-lamport session fee plus 1,000,000 per
+commit after the first, capped by that delegation's deposit (about 2.8M–3.3M), and each re-delegation
+pays a new deposit. See
+[fees-and-commit-economics.md](fees-and-commit-economics.md#2-delegation-deposits-and-undelegation-charges).
 
 ### Option 2: Pay your own commits via `magic_fee_vault` + delegated fee payer
 
 For long-lived delegations or high commit frequency, attach a `magic_fee_vault` to the intent bundle
 and use a delegated fee payer, usually a PDA that signs via seeds. This selects the validator's
 fee-vault path. Commits 1 through 25 have no additional live debit; commit 26 and later debit
-`100_000` lamports per committed account. Delegation cleanup fees still apply separately.
+`1_000_000` lamports per committed account on the live validators (`8886db2`; the `v1.1.1` tag
+charged `100_000`). Delegation cleanup fees still apply separately.
 
 #### Deriving the fee vault PDA
 

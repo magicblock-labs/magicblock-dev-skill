@@ -56,11 +56,11 @@ and why nearby alternatives were rejected.
 | SPL balances used by a custom program on the ER | Ephemeral SPL Token | Model the base vault, delegated token account, and chosen shuttle or explicit legacy withdrawal path |
 | Temporary state that must exist only on the ER | Ephemeral Accounts | Model the sponsor, ER-only creation, resize/close lifecycle, and intentional lack of base settlement |
 | Temporary delegated signing authority | Session keys | Define scope, expiry, revocation, and the onchain authorization check |
-| Low-latency external market data | Pricing Oracle | Verify source/feed identity, publish-time freshness, numeric conversion, user limits, and runtime co-location |
+| Low-latency external market data | Pricing Oracle | Read feeds on the ER only (base copies are stale); verify feed account and owner, publish-time freshness, the feed-list exponent, user limits, and runtime co-location |
 | Verifiable randomness | VRF | Model request, callback, oracle dependency, and callback failure |
 | Repeated scheduled execution | Cranks | Model interval, iteration limits, cancellation, failure, and commit cost |
 | Base-layer effect tied to an ER commit | Magic Actions | Define the post-commit instruction, committor retry behavior, observation, and reconciliation |
-| More than 10 commits without a fee vault | Delegated payer + fee-vault path | Model cleanup charges, live debits from commit 26, payer funding, and top-ups |
+| More than 10 commits per delegation | Delegated payer + fee-vault path (without it, commit 11 hard-fails until re-delegation, and each re-delegation pays a new ~2.8M–3.3M deposit) | Model cleanup charges, live debits of `1_000_000` per account from commit 26, payer funding, and top-ups |
 
 Do not conflate PER with Private Payments. PER protects access to delegated program state; Private
 Payments exposes a managed private-balance and transfer API.
@@ -123,7 +123,8 @@ Specify:
 - maximum acceptable uncommitted duration and data loss window
 - terminal undelegation owner and trigger
 - post-commit effects, action-stripping retry risk, observation, and reconciliation requirements
-- commit quota, delegated payer debit, validator fee-vault credit, and payer top-up behavior
+- the no-vault commit cap (10 per delegation), delegated payer debit, validator fee-vault credit,
+  and payer top-up behavior
 - timeout, retry, idempotency, cancellation, and refund paths
 - monitoring for base ownership, router status, ER ownership, commit progress, and service health
 - manual recovery path and the actor authorized to use it
@@ -174,7 +175,7 @@ assumptions the lower layer cannot exercise.
 
 | Environment | Use for | Do not assume it proves |
 | --- | --- | --- |
-| Program unit tests or MagicSVM | Deterministic instruction, account, and clock tests; with MagicSVM `0.3.0`, the ER lifecycle too (delegate, commit, undelegate, intent bundles, post-delegation and post-commit actions, Ephemeral Accounts, eATA, permission-gated reads, validator `1.1.1` cranks, VRF callbacks) | Router placement, live validators, Hydra cranks, the real VRF oracle, fees/commit limits, TEE attestation, or deployed service integration |
+| Program unit tests or MagicSVM | Deterministic instruction, account, and clock tests; with MagicSVM `0.3.0`, the ER lifecycle too (delegate, commit, undelegate, intent bundles, post-delegation and post-commit actions, Ephemeral Accounts, eATA, permission-gated reads, validator `1.1.1` cranks, VRF callbacks) | Router placement, live validators, Hydra cranks, the real VRF oracle, fees/commit limits, TEE attestation, the TEE's default token-account privacy, or deployed service integration |
 | `mb-stack` | Local base validator + ER + query-filtering integration | Program build/deploy, router, VRF oracle, or every hosted-service behavior |
 | Devnet | Router discovery, live delegation propagation, hosted oracles/services, and end-to-end settlement | Mainnet load, production funding, or operational guarantees |
 

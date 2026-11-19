@@ -16,12 +16,21 @@ verified against the live `/doc` OpenAPI document (`SPL Private Payments API` `0
 **2026-10-20**, with the withdraw, challenge, and fee fields re-checked on **2026-11-13**. This
 service is mutable. Re-fetch
 `https://payments.magicblock.app/doc` before implementation and treat any field with no declared schema
-default—such as `exactOut` in this snapshot—as unspecified rather than inferred.
+default as unspecified rather than inferred. Exception: `exactOut` has no schema default, but the API
+and SDK treat a missing value as `true` (unsigned builds decoded on 2026-11-19).
 
 ## Deployment status
 
 One hosted deployment serves every network. Select the network per request with `cluster`
-(`mainnet`, `devnet`, `mainnet-private`, `devnet-private`, or a custom base RPC URL). On 2026-10-20
+(`mainnet`, `devnet`, `mainnet-private`, `devnet-private`, or a custom base RPC URL).
+
+**Privacy needs a `-private` cluster.** `mainnet` and `devnet` route to the public ER: unsigned
+private transfer builds on 2026-11-19 named validator `MAS1Dt9…`, the public `as` / `devnet-as`
+identity. Only `mainnet-private` and `devnet-private` route to the TEE (`MTEWGuqx…`). A
+`visibility: "private"` transfer or private deposit on `mainnet` or `devnet` therefore runs on a
+publicly readable ER. Pass a `-private` cluster on every call when privacy matters.
+
+On 2026-10-20
 everything on upstream `main` through #148 was live for both devnet and mainnet:
 
 | Feature (upstream PR) | Live? | Evidence |
@@ -284,7 +293,7 @@ Transfer SPL tokens publicly or privately through an ephemeral rollup.
 | to | string (pubkey or initialized stealth handle) | Yes | Recipient owner or exact stealth handle |
 | mint | string (pubkey) | Yes | SPL mint address |
 | amount | integer (>=0) | Yes | Base-unit amount. Zero is reserved for supported private base→ephemeral setup flows; ordinary value transfers should be positive |
-| visibility | `"public"` \| `"private"` | No | Defaults to `"private"` |
+| visibility | `"public"` \| `"private"` | No | Defaults to `"private"`. TEE privacy also needs a `-private` `cluster` |
 | fromBalance | `"base"` \| `"ephemeral"` | No | Source balance location; set it explicitly |
 | toBalance | `"base"` \| `"ephemeral"` | No | Destination balance location; set it explicitly |
 | cluster | string | No | Cluster selection |
@@ -297,7 +306,7 @@ Transfer SPL tokens publicly or privately through an ephemeral rollup.
 | maxDelayMs | string (numeric) | No | Private only. Max delay. Defaults to `"0"` or `minDelayMs` |
 | clientRefId | string (numeric) | No | Private only. Encrypted client reference ID for confirming a payment |
 | split | integer (1-15) | No | Private only. Split into N sub-transfers. Defaults to 1. Cannot exceed `amount` |
-| exactOut | boolean | No | Private fee policy: `true` deducts fees from sender; `false` deducts them from recipient amount. The live schema declares no default |
+| exactOut | boolean | No | Private fee policy: `true` deducts fees from sender; `false` deducts them from recipient amount. The live schema declares no default, but omitted means `true` |
 | platformFeeBps | integer (0-10000) | No | Token-denominated platform fee supported only for base-source transfers |
 | platformFeeAccount | string (token account pubkey) | When fee > 0 | Initialized token account for the transferred mint |
 | gasless | boolean | No | When `true`, the API uses the configured sponsor as fee payer and prepends a relay-fee token transfer to the sponsor ATA |
@@ -338,14 +347,20 @@ Zero-amount setup transfers and native SOL stay on the legacy cleartext route. S
 Only private base→base settlement creates a missing recipient token account on base (for the first
 delivered split). A private ephemeral→base split to an owner without a base token account is refunded
 to the sender's existing base token account instead; refunds never create that account, so the sender
-must keep one for the mint. On a program without eSPL #158 (mainnet on 2026-11-13), the refund of a
-transfer queued without the receipt permission pair is rolled back; the API adds the pair. With a `splitAcrossKeys` stealth pool, keys after the first need an existing
+must keep one for the mint. On a program without eSPL #158 (mainnet on 2026-11-19), the refund of a
+transfer queued without the receipt permission pair is rolled back; the API and TS SDK ≥ 0.18.0 add
+the pair. With a `splitAcrossKeys` stealth pool, keys after the first need an existing
 token account. See [ephemeral-spl-token.md](ephemeral-spl-token.md#queued-private-settlement).
 
 The live request schema accepts `amount: 0` for specific private base→ephemeral setup/delegation flows;
-do not generalize zero as a meaningful payment amount for other routes. With `exactOut: true`, the
-recipient receives `amount` and the sender pays the platform fee in addition; with `false`, the fee is
-deducted from the recipient amount. Gasless mode requires a configured sponsor,
+do not generalize zero as a meaningful payment amount for other routes.
+
+Every private base→base transfer also pays a 0.1% (10 bps) fee in the transferred token
+(`PRIVATE_TRANSFER_FEE_BASIS_POINTS = 10`, eSPL ix `25`). With `exactOut: true`, the default, the
+recipient receives `amount` and the sender pays the fees in addition: a 1,000,000-unit transfer
+returns `fees.tokens: "1000"` and moves 1,001,000 out of the sender's token account (verified
+2026-11-19). A sender balance check of `amount` alone fails. With `false`, the fees are deducted from
+the recipient amount. Gasless mode requires a configured sponsor,
 an approved stablecoin mint (mainnet USDC/USDT or devnet USDC), and a transfer of at least 0.5
 USDC/USDT. It charges a 0.2 USDC/USDT relay fee. If `from` is an
 off-curve PDA owner, gasless mode is ignored because the supported flow requires a wallet sender.

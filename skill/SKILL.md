@@ -38,11 +38,11 @@ the delegation program on base, owned by the original program on the ER endpoint
 returned by router `getDelegationStatus`, and reported `isDelegated: true` by
 `getDelegationStatus` sent to that ER endpoint itself.
 
-For the verified SDK v0.17.3 snapshot, use **MagicIntentBundleBuilder** to
+With the SDK `0.18.x` pin (and 0.17.x), use **MagicIntentBundleBuilder** to
 schedule commit and commit-and-undelegate intents. Do not use the deprecated
 free functions `commit_accounts` and `commit_and_undelegate_accounts`.
 
-**Private Ephemeral Rollups (PER)** gate a delegated account inside a TEE-backed validator with an ER-local `EphemeralPermission`. Delegate only the data account on the base layer, then create, update, and close its permission on the ER with `CreateEphemeralPermissionCpi`, `UpdateEphemeralPermissionCpi`, and `CloseEphemeralPermissionCpi`. Do not create or delegate a separate base-layer permission account.
+**Private Ephemeral Rollups (PER)** gate a delegated account inside a TEE-backed validator with an ER-local `EphemeralPermission`. Delegate only the data account on the base layer, then create, update, and close its permission on the ER with `CreateEphemeralPermissionCpi`, `UpdateEphemeralPermissionCpi`, and `CloseEphemeralPermissionCpi`. For new code, do not create or delegate a separate base-layer permission account. That is application guidance, not a protocol rule: the legacy v1 base-layer permission path still works (see [delegation.md](references/delegation.md#private-ephemeral-rollups-per-er-local-permissions)).
 
 **Magic Actions** are base-layer instructions scheduled inside an ER transaction via
 `MagicIntentBundleBuilder.add_post_commit_actions(...)`. Each attempted base-layer transaction applies
@@ -51,11 +51,15 @@ that affected `TransactionStrategy` before retrying its remaining commit strateg
 transaction/finalize strategies are outside that removal scope. Observe and reconcile every originally
 scheduled action: scheduling or eventual commit success alone does not prove that any of them ran.
 
-**Commit fees and limits** span the Delegation Program and validator. Without the fee-vault path, a
-plain commit fails once the account's current nonce reaches 10; accepted commits can still consume
-the delegation PDA fee budget at undelegation. With a delegated payer and validator-scoped
-`magic_fee_vault`, commit 26 starts debiting `100_000` lamports per committed account. Validator
-1.1.1 refuses to commit an account larger than 10,240 bytes, so do not delegate accounts you will
+**Commit fees and limits** span the Delegation Program and validator. Without the fee-vault path,
+commits 1–10 are accepted and commit 11 fails with `0xA0000000`. That is a hard cap until the account
+is undelegated; commit-and-undelegate stays allowed so it can exit. Re-delegating resets the count but
+does not make commits free: the delegation deposit (about 2.8M–3.3M lamports) pays a 3M session fee
+plus 1M per commit after the first at undelegation, so nothing is refunded once a session has
+committed twice. With a delegated
+payer and validator-scoped `magic_fee_vault`, commit 26 onward debits `1_000_000` lamports per
+committed account on the live validators (`8886db2`; the `v1.1.1` tag charged `100_000`). The live
+validators refuse to commit an account larger than 10,240 bytes, so do not delegate accounts you will
 need to commit above that size. Read
 [fees-and-commit-economics.md](references/fees-and-commit-economics.md) first for fee, refund,
 sponsorship, cost-estimation, or fee-payer funding questions.
@@ -71,9 +75,13 @@ credit an ER-only **Magic ATA** (TS SDK ≥ 0.17.1). Before you promise that an 
 a cluster, check the devnet/mainnet deployment table in
 [ephemeral-spl-token.md](references/ephemeral-spl-token.md#deployment-status).
 
-**Pricing Oracle** republishes supported market feeds for Solana/ER consumers. A safe integration
-verifies the expected feed identity, upstream publish-time freshness, value domain, exponent, checked
-arithmetic, and user price bounds; successful deserialization alone is not price validation.
+**Pricing Oracle** republishes Pyth Lazer feeds into accounts updated on the ER. Read them on the
+ER only: the base-layer copies are delegated and stale (mainnet SOL/USD was 462 days old on
+2026-11-19). The stored `exponent` is `+8` on every feed, so take the exponent from the feed list.
+Feeds are `PriceUpdateV3` accounts owned by `PriCems…`; `Account<PriceUpdateV2>` rejects them. A safe
+integration verifies the feed account and owner, upstream publish-time freshness, value domain,
+checked arithmetic, and user price bounds; successful deserialization alone is not price validation.
+See [pricing-oracle.md](references/pricing-oracle.md).
 
 **Session Keys** authorize a temporary signer for constrained application actions. Session validity is
 separate from SPL token authority: token spending also requires an explicit, bounded token delegate
@@ -96,7 +104,7 @@ allowance.
 Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported.
 
 - Use the target repo's existing `ephemeral-rollups-sdk` / Anchor versions unless the task is an explicit upgrade
-- The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs. Open SDK PR #317 removes `anchor-compat`, so new code should target Anchor 1.x
+- The SDK feature flag selects the Anchor range: `anchor` for Anchor 1.x programs, or `anchor-compat` for Anchor >=0.28,<1.0 programs (SDK 0.18.x and earlier). SDK 0.20.0 removed `anchor-compat` (#317), so new code should target Anchor 1.x
 - Product features are opt-in: `access-control` (PER), `spl` (eSPL), `vrf`, and `crank`
 
 **Required macros:**
@@ -105,9 +113,11 @@ Use Anchor with `ephemeral-rollups-sdk`; native and Pinocchio are also supported
 - `#[delegate]` and `#[commit]` on the respective delegation/commit account contexts.
 - `#[vrf]` on a VRF *request* context **and** `#[vrf_callback]` on the VRF *callback* context — the
   callback macro authenticates fulfillment. Enable the `vrf` feature on `ephemeral-rollups-sdk`.
-  SDK v0.17.3 re-exports VRF behind that feature, so new Anchor code does not need a direct
+  SDK 0.17+ re-exports VRF behind that feature, so new Anchor code does not need a direct
   `ephemeral-vrf-sdk` dependency. In 0.17, `create_request_randomness_ix` is the scoped request
-  (0.16 called it `create_request_scoped_randomness_ix`). See [vrf.md](references/vrf.md).
+  (0.16 called it `create_request_scoped_randomness_ix`); 0.18 deprecates it in favour of
+  `create_request_randomness_ix_const`. On 0.20.0, `#[vrf]` does not compile. See
+  [vrf.md](references/vrf.md).
 
 **Non-Anchor programs:** use the
 `ephemeral-rollups-pinocchio` crate (delegation, commit, and VRF have Pinocchio equivalents). The
@@ -118,10 +128,22 @@ Versions in this skill are known-good snapshots or compatibility markers. Before
 inspect the target repository's manifests, toolchain files, lockfiles, and relevant upstream sources.
 See [resources.md](references/resources.md) for the dated snapshot and source links.
 
-Public ERs run validator 1.1.1 (checked 2026-11-13). Validator 2.0 is a release candidate only; it
-moves scheduled tasks to Hydra and changes the commit receipt log. Treat 2.0 notes in
-[cranks.md](references/cranks.md) and [delegation.md](references/delegation.md) as upcoming, and
-check `getVersion` on the target ER before relying on either behavior.
+**Validators (checked 2026-11-19).** Validator 2.0 is released: `v2.0.2` is the GitHub Latest
+release and npm `latest` is `2.0.1`. Only devnet-us runs it (`getVersion` reports `core 2.0.0`,
+commit `9456c18`), and the devnet router can place delegations there. The other public and TEE ERs
+report `magicblock-core 1.1.1` but run V1 branch head `8886db2`, not the `v1.1.1` tag. `8886db2`
+differs from the tag in the fee-vault commit fee and in the no-vault limit on `commit_finalize`; see
+[fees-and-commit-economics.md](references/fees-and-commit-economics.md). 2.0 moves scheduled tasks to
+Hydra and changes the commit receipt log ([cranks.md](references/cranks.md),
+[delegation.md](references/delegation.md)). Check `getVersion` on the target ER before relying on
+either behavior: 2.0 reports `core`, 1.x reports `magicblock-core`.
+
+**SDK lines.** Pin `ephemeral-rollups-sdk` (Rust) and `@magicblock-labs/ephemeral-rollups-sdk` (npm,
+dist-tag `legacy`) to `0.18.x` for the public ERs; it supports validator 1.x and 2.0. `0.20.x` is the
+2.0 line (anchor-lang ≥ 1.2.2, no `anchor-compat`, kit `^8`); use it only against 2.0 endpoints. Its
+Rust `#[vrf]` fails to compile (`E0433` `slot_hashes`), and its TS `GetCommitmentSignature` throws on
+v1 logs. 0.17.x's `GetCommitmentSignature` throws on v2 logs. `cargo add` without a version and npm
+`@latest` resolve to 0.20. See [resources.md](references/resources.md#sdk-lines).
 
 ### Connections
 
@@ -172,8 +194,10 @@ For each implementation, record:
 - Which connection to use for each transaction
 - Router `getDelegationStatus` checks before operations
 - PDA seeds matching between delegate call and account definition
-- Preserving preflight for supported base transactions, and using `skipPreflight: true` only for an ER
-  path with a known simulation incompatibility (document the reason and inspect execution logs)
+- Preserving preflight for supported base transactions. On the ER, preflight is not a simulation:
+  the transaction executes and is recorded either way, and `skipPreflight: true` only makes
+  `sendTransaction` return before execution, so it hides the execution error. If you skip it,
+  check the ER transaction status and logs
 - Waiting for state propagation after delegate/undelegate
 - For Ephemeral SPL Token flows, selecting the deposit and withdrawal builders independently: use the
   default shuttle withdrawal, or explicitly run `undelegateIx`, wait for its base commit, and call the

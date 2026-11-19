@@ -30,6 +30,18 @@ by the application path that accepts the session.
 The session-token PDA is scoped by target program, session signer, and wallet authority. Always use the
 current SDK derivation instead of copying seed bytes from an old example.
 
+V1 and V2 tokens do not interoperate (verified on the deployed `KeyspM2ss…` program, 2026-11-19):
+
+- `SessionToken` (V1, seed `session_token`) and `SessionTokenV2` (seed `session_token_v2`) are
+  different account types. A V2-typed instruction rejects a V1 token, and the reverse, with
+  `AccountDiscriminatorMismatch` (3002).
+- The `@magicblock-labs/gum-react-sdk` 3.0.10 hooks (`useSessionKeyManager`) create and revoke V1
+  tokens only. A V2 program needs `createSessionV2` / `revokeSessionV2`, which the current examples
+  call through `gum-sdk`'s `SessionTokenManager.program`.
+- Anyone can revoke an active V1 token; the instruction has no authority-signer check, so a third
+  party can end a user's V1 sessions. Revoking an active V2 token requires the authority's signature
+  (`InvalidAuthority` otherwise).
+
 The optional lamports value supplied at session creation is a one-time transfer that tops up the
 session signer. It is not stored in `SessionTokenV2`, decremented per transaction, or enforced as a
 protocol spending budget. Any value or transaction-count budget must live in application state and be
@@ -57,6 +69,7 @@ checked by the target program.
 - Limit duration, instruction surface, one-time signer top-up, and token allowance. Implement and
   decrement any application spending budget explicitly; do not infer one from the top-up.
 - Reject a session token created for another program or authority.
+- Use `SessionTokenV2`; anyone can revoke an active V1 token.
 - Keep privileged instructions wallet-only by default.
 - Store session secret material in memory or protected device storage; never log or commit it.
 - Make revocation visible and accessible to users.
