@@ -198,16 +198,26 @@ top-level, not through CPI.
 - Scheduled instructions cannot carry signer metas. A preceding `Trigger` alone is not
   authorization: anyone can create and trigger their own crank that schedules your instruction. A
   handler that needs crank-only authority must take the instructions sysvar and reject unless
-  `ix[k-1]` has the Hydra program ID, the `Trigger` discriminator, and, as its first account, the
-  expected crank PDA. Derive the expected PDA with the seeds your crank was created with: the
+  `ix[k-1-j]` has the Hydra program ID, the `Trigger` discriminator, and, as its first account, the
+  expected crank PDA, where `j` is the handler's 0-based position in its crank's scheduled list.
+  The cranker sends `Trigger` and then every scheduled instruction contiguously and in order, and
+  `Trigger` byte-matches that whole run against the stored template, so `ix[k-1]` is the `Trigger`
+  only for the first scheduled instruction. Check the fixed position `j` your program scheduled the
+  handler at; do not scan back to the nearest `Trigger`, because a cranker can append unbound
+  instructions after the scheduled run. Derive the expected PDA with the seeds your crank was created with: the
   ephemeral program accepts both the payer-bound `[b"crank", payer, seed]` (preferred) and the
   legacy `[b"crank", seed]`; the deployed base program supports only the legacy seeds until it is
   redeployed. Cranks that the 2.0 validator creates from `ScheduleTask` use fixed legacy seeds and the
   validator as header authority; see [Validator 2.0](#validator-20-hydra-devnet-us). Do not pass the crank PDA as an account of the scheduled instruction (it is writable in
   `Trigger`, so the crank could never match).
-- When the schedule's creator matters, also load the crank header (`hydra_api::state::load_crank`)
-  and require `authority == expected_authority` and `authority_signer == 1`; with
-  `authority_signer == 0` the authority is stored only for cancellation and proves nothing.
+- When the schedule's creator matters, use the payer-bound seeds and derive the expected PDA from
+  the expected payer: the payer must sign `Create` (it funds the account on base, and it is the
+  ephemeral account sponsor on the ER), so the PDA check proves who created the crank. A handler
+  cannot read the crank header itself, because the crank PDA cannot be one of its accounts. The
+  Hydra README suggests `hydra_api::state::load_crank` with `authority == expected_authority` and
+  `authority_signer == 1`, but gives no supported way to pass the crank account; use the header
+  check only off-chain or in an instruction outside the crank. Legacy `[b"crank", seed]` cranks
+  cannot be tied to a creator from inside the handler.
 - Base layer: each trigger pays the cranker 10,000 lamports plus `priority_tip` from the crank's
   balance. ER: the flat reward is `0`, so `priority_tip` is the cranker's only incentive.
 - Something must run `hydra-cranker` (published as `@magicblock-labs/hydra-cranker-<platform>` npm
@@ -228,8 +238,8 @@ Verified against `9456c18` on 2026-11-19:
   removed (`ExecuteCrank` fails with "crank execution is handled by hydra"), and any signer meta in a
   scheduled instruction is rejected. The 1.1.1 pattern above (a read-only `crank_signer_pda` signer
   meta) therefore fails `ScheduleTask` with `MissingRequiredSignature`.
-- Privileged handlers must authenticate the preceding Hydra `Trigger` and its crank (program ID,
-  discriminator, expected crank PDA, and the crank header), as described in
+- Privileged handlers must authenticate the Hydra `Trigger` at their fixed position and its crank
+  (program ID, discriminator, and expected crank PDA), as described in
   [Hydra cranks](#hydra-cranks). Checking only that a `Trigger` precedes the handler, which is all the
   `crank-counter` example comment describes, is not enough.
 - A crank the validator creates from `ScheduleTask` uses the legacy unscoped PDA

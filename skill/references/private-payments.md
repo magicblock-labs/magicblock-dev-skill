@@ -275,7 +275,8 @@ Deposit SPL tokens from Solana into an ephemeral rollup.
   "initVaultIfMissing": true,
   "initAtasIfMissing": true,
   "idempotent": true,
-  "private": true
+  "private": true,
+  "cluster": "mainnet-private"
 }
 ```
 
@@ -319,6 +320,7 @@ Transfer SPL tokens publicly or privately through an ephemeral rollup.
   "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   "amount": 1000000,
   "visibility": "private",
+  "cluster": "mainnet-private",
   "fromBalance": "base",
   "toBalance": "base",
   "initIfMissing": true,
@@ -359,7 +361,7 @@ Every private base→base transfer also pays a 0.1% (10 bps) fee in the transfer
 (`PRIVATE_TRANSFER_FEE_BASIS_POINTS = 10`, eSPL ix `25`). With `exactOut: true`, the default, the
 recipient receives `amount` and the sender pays the fees in addition: a 1,000,000-unit transfer
 returns `fees.tokens: "1000"` and moves 1,001,000 out of the sender's token account (verified
-2026-11-19). A sender balance check of `amount` alone fails. With `false`, the fees are deducted from
+2026-11-19). That debit is without gasless mode: with `gasless: true`, as in the example above, the sender also pays the 0.2 USDC/USDT relay fee (200,000 base units) to the sponsor. A sender balance check of `amount` alone fails. With `false`, the fees are deducted from
 the recipient amount. Gasless mode requires a configured sponsor,
 an approved stablecoin mint (mainnet USDC/USDT or devnet USDC), and a transfer of at least 0.5
 USDC/USDT. It charges a 0.2 USDC/USDT relay fee. If `from` is an

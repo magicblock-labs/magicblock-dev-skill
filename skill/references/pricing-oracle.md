@@ -65,8 +65,11 @@ Successful deserialization is insufficient. Verify:
    Pyth Lazer or Stork proof.
 4. **Freshness** — compare the upstream publish timestamp with the current clock and reject data older
    than the product's explicit maximum age.
-5. **Value domain** — reject non-positive values where they are nonsensical and define how confidence
-   or uncertainty affects the product.
+5. **Value domain** — reject non-positive values where they are nonsensical. Do not use `conf` as an
+   uncertainty measure: the oracle initializes it to `0` and never writes it, and the live SOL/USD
+   feed on the mainnet and devnet ERs reads `conf == 0` (2026-11-19), so a confidence-width check
+   passes every update. Take uncertainty from another source, or fail closed by policy (price
+   bands, maximum move per update, or a second feed).
 6. **Numeric conversion** — the stored `exponent` is wrong: it is `+8` on every feed checked on
    2026-11-19 (SOL, BTC, ETH, USDC, PEPE, NEIRO, BONK), wrong in sign for all and in magnitude for
    the −10 feeds. Take the exponent from the feed list (`pyth_lazer_list.json`: −8 for SOL/USD, −10

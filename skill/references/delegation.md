@@ -538,7 +538,7 @@ commit-time errors.
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
 > **Validator 2.0 (released; devnet-us runs `2.0.0` on 2026-11-19).** The scheduling transaction
-> logs `ScheduledCommitSent outbox: <address>` instead of
+> logs `Outbox for scheduled intent: <address>` instead of
 > `ScheduledCommitSent signature: <sig>`. Find completion with `getSignaturesForAddress(outbox)`
 > then `getTransaction`; SDK `0.18.x` `GetCommitmentSignature` does this. Committed accounts must
 > also be writable, including when committing from inside another program (otherwise

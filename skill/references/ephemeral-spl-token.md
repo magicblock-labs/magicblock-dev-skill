@@ -466,7 +466,7 @@ refund: its callback still marks the missing permission writable, the ER rejects
 (`InvalidWritableAccount`), and the refund is rolled back. With the pair, the mainnet binary's refund
 tests pass. #158 records `QUEUED_TRANSFER_FLAG_NO_RECEIPT_PERMISSION` on such transfers and gives them
 a 13-account callback that refunds. Until the target cluster runs #158, build queued ephemeral→base
-transfers with TS SDK ≥ 0.18.0 or the Payments API, not 0.17.x. Checking beforehand that every
+transfers with TS SDK 0.18.x (0.20.x only against validator 2.0, because its `GetCommitmentSignature` fails on 1.x) or the Payments API, not 0.17.x. Checking beforehand that every
 recipient has a base token account does not make the 0.17.x path safe: the recipient can close or freeze that account after the transfer is
 queued, and the failed delivery's refund is still rolled back.
 
@@ -708,7 +708,7 @@ receipts close after all callbacks, so they are execution coordination—not dur
 - **Queue removal is not payout completion** — a ready item is popped when its action is scheduled.
   Reconcile with receipts, destination state, callbacks, and refunds.
 - **Ephemeral→base recipients need a base token account** — the direct route never creates one. On a
-  cluster without #158, build queued ephemeral→base transfers with TS SDK ≥ 0.18.0 or the Payments API
+  cluster without #158, build queued ephemeral→base transfers with TS SDK 0.18.x (0.20.x only on validator 2.0) or the Payments API
   (both add the receipt permission pair); a pre-check of the recipient's account is not a substitute, because it can be closed or frozen before delivery.
 - **Do not mix models** — an app program in Model A should never derive eATA or
   vault PDAs; a Model B contract must not assume canonical-ATA balances exist

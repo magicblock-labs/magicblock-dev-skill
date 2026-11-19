@@ -103,8 +103,10 @@ live commit behavior still need a live ER.
 
 SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magic` field marker,
 `create/init_if_needed/resize/close_magic_<field>`), keeping the current names as deprecated aliases.
-It shipped in `0.20.0`, the validator 2.0 line; `0.18.x`, the pin for the public ERs, keeps the
-`ephemeral_accounts` names. Use the names that the target SDK version exports.
+It shipped in `0.20.0`, the validator 2.0 line. `0.18.0` already exports `#[magic_accounts]` behind
+the optional `magic-accounts` feature, which targets validator 2.0's dedicated Magic Account program
+(see [delegation.md](delegation.md)); its default `ephemeral_accounts` names stay the route for the
+1.x public ERs. Use the names that the target SDK version and validator support.
 
 Working example: `magicblock-engine-examples/ephemeral-account-chats/anchor`.
 

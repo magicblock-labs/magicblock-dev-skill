@@ -123,7 +123,7 @@ delegated account without actions. Both PDAs are funded at the Delegation Progra
 legacy-rent floor `(size + 128) * 6_960` lamports, a DLP constant, not Solana's current rent: live
 `getMinimumBalanceForRentExemption` on mainnet and devnet returned `(size + 128) * 5_080` on
 2026-11-19 (650,240 for 0 bytes, 1,158,240 for 100 bytes). The 96-byte record holds `1_559_040`.
-Re-check both before quoting a deposit.
+Re-check both before quoting a deposit. The refund columns assume the recorded rent payer ends rent-exempt after the refund: `close_pda_with_fees` sends a refund that would leave it rent-paying (for example 145,920 lamports to an empty payer, below the 650,240 minimum) to the validator fees vault instead, so that payer gets 0.
 
 | Metadata seeds (metadata size) | Deposit `D` | Refund at `last_commit_id` 0 | 1 | 2 | 5 |
 |---|---:|---:|---:|---:|---:|
