@@ -60,7 +60,7 @@ and why nearby alternatives were rejected.
 | Verifiable randomness | VRF | Model request, callback, oracle dependency, and callback failure |
 | Repeated scheduled execution | Cranks | Model interval, iteration limits, cancellation, failure, and commit cost |
 | Base-layer effect tied to an ER commit | Magic Actions | Define the post-commit instruction, committor retry behavior, observation, and reconciliation |
-| More than 10 commits per delegation | Delegated payer + fee-vault path (without it, commit 11 hard-fails until re-delegation, and each re-delegation pays a new deposit: ~2.8M–3.3M for one account without actions, more with delegate-with-actions, whose payload is funded into the record at 6,960 lamports per byte; compute it with [fees-and-commit-economics.md](fees-and-commit-economics.md#measured-deposits-and-refunds)) | Model cleanup charges, live debits of `1_000_000` per account from commit 26, payer funding, and top-ups |
+| More than 10 commits per delegation | Delegated payer + fee-vault path (without it, commit 11 hard-fails until re-delegation, and each re-delegation pays a new deposit; see [fees-and-commit-economics.md](fees-and-commit-economics.md#measured-deposits-and-refunds)) | Model cleanup charges, live debits of `1_000_000` per account from commit 26, payer funding, and top-ups |
 
 Do not conflate PER with Private Payments. PER protects access to delegated program state; Private
 Payments exposes a managed private-balance and transfer API.

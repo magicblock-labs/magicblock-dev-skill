@@ -201,7 +201,7 @@ Program behaviour, verified 2026-11-13 against SolanaVrf v1.0 (`solana-vrf` comm
 build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged). The lifecycle,
 fees, and TTL were re-run on the deployed mainnet and devnet binaries on 2026-11-19:
 
-- A request becomes purgeable 121–127 seconds after creation. `QUEUE_TTL_SECONDS` is 120, but
+- A request becomes purgeable 121–124 seconds after creation (the queue clock); the purge itself runs later. `QUEUE_TTL_SECONDS` is 120, but
   `created_at` is stored in 4-second units (a `u16`, which wraps about every 72.8 hours), so the cut-off
   depends on rounding. Expiry does not invalidate it: `ProvideRandomness` does not check request age, so
   the oracle can still fulfill it until the queue's oracle runs `PurgeExpiredRequests`, which it does
@@ -258,7 +258,7 @@ or the real oracle, so keep a Devnet check for those.
 - `caller_seed` adds client-side entropy; `callback_args` forwards extra data to the callback.
 - Treat request acceptance and callback fulfillment as separate observable states.
 - Bind one callback to one request and make its economic effects idempotent.
-- Requests become purgeable 121–127 seconds after creation and are not refunded once purged, but can still be
+- Requests become purgeable 121–124 seconds after creation and are not refunded once purged, but can still be
   fulfilled until the purge runs; reject late callbacks for superseded requests. Legacy requests
   reject non-allowlisted program accounts in the callback list.
 

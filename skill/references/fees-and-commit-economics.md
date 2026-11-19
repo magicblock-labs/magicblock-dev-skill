@@ -135,7 +135,9 @@ Re-check both before quoting a deposit. The refund columns assume the recorded r
 
 The deposit is about the size of the 3,000,000 session fee. With short seeds it is below the fee, so
 nothing is refunded even without commits. From `last_commit_id` 2 the refund is 0 for every shape
-measured, and the 1,000,000-per-commit charges past the deposit are never collected. Budget the
+measured, and the 1,000,000-per-commit charges past the deposit are never collected. Longer seeds
+raise the deposit: eight 32-byte seeds make 341-byte metadata, a 4,823,280 deposit, and an 823,280
+refund at `last_commit_id` 2 (the metadata adds 4 + seed length bytes per seed). Budget the
 whole deposit as the cost of one delegation. Re-delegating to reset the commit count pays a new
 deposit each time.
 
@@ -159,6 +161,9 @@ for every committed account.
 - Current nonce `10` or greater: the whole scheduling instruction fails with custom error
   `0xA0000000` (`COMMIT_LIMIT_ERR`), so commit 11 fails.
 - The log tells the caller to undelegate/re-delegate or use a delegated account as payer.
+- On 1.x the nonce is the last one landed on base (`last_commit_id`); scheduling does not reserve
+  one, so commits queued before earlier ones land are not counted yet. 2.0 reserves commit IDs at
+  scheduling.
 
 This is a hard cap for the rest of the delegation, not a quota that refills. Re-delegating resets the
 nonce, but it is not free: each delegation pays its own deposit and cleanup charges (see

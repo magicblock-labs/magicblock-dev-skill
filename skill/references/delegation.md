@@ -565,8 +565,10 @@ Read [fees-and-commit-economics.md](fees-and-commit-economics.md) before estimat
 commits as free. The Delegation Program collects session and after-first-commit charges from delegation
 PDA deposits at undelegation, while the validator separately enforces live commit limits and fees.
 
-Without a delegated payer, the validator accepts commits 1–10 and rejects commit 11 with
-`0xA0000000`. This is a hard cap, not a soft quota. Commit-and-undelegate kinds are exempt so the
+Without a delegated payer, the validator rejects a plain commit with `0xA0000000` once the account's
+commit nonce reaches 10, so commit 11 fails when commits land one at a time. On 1.x the check reads
+the last landed nonce, so queued commits are not counted until they land; 2.0 counts them at
+scheduling. This is a hard cap, not a soft quota. Commit-and-undelegate kinds are exempt so the
 account can exit; on the live `8886db2`, `commit_finalize` intents are capped too. You have two
 options:
 
@@ -576,7 +578,7 @@ Undelegating and re-delegating the account resets its commit nonce, so the next 
 ten more times. This fits flows that already cycle through delegation boundaries (session start →
 play → session end → next session), and needs no fee-vault accounts or builder methods. It does not
 make commits free: each undelegation charges the 3,000,000-lamport session fee plus 1,000,000 per
-commit after the first, capped by that delegation's deposit (about 2.8M–3.3M), and each re-delegation
+commit after the first, capped by that delegation's deposit (about 2.8M–3.3M for short seeds without actions), and each re-delegation
 pays a new deposit. See
 [fees-and-commit-economics.md](fees-and-commit-economics.md#2-delegation-deposits-and-undelegation-charges).
 

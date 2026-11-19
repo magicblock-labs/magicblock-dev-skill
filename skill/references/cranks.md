@@ -208,16 +208,15 @@ top-level, not through CPI.
   ephemeral program accepts both the payer-bound `[b"crank", payer, seed]` (preferred) and the
   legacy `[b"crank", seed]`; the deployed base program supports only the legacy seeds until it is
   redeployed. Cranks that the 2.0 validator creates from `ScheduleTask` use fixed legacy seeds and the
-  validator as header authority; see [Validator 2.0](#validator-20-hydra-devnet-us). Do not pass the crank PDA as an account of the scheduled instruction (it is writable in
-  `Trigger`, so the crank could never match).
+  validator as header authority; see [Validator 2.0](#validator-20-hydra-devnet-us). A read-only crank meta in the scheduled instruction can never match, because `Trigger`
+  makes the crank writable for the whole transaction.
 - When the schedule's creator matters, use the payer-bound seeds and derive the expected PDA from
   the expected payer: the payer must sign `Create` (it funds the account on base, and it is the
-  ephemeral account sponsor on the ER), so the PDA check proves who created the crank. A handler
-  cannot read the crank header itself, because the crank PDA cannot be one of its accounts. The
-  Hydra README suggests `hydra_api::state::load_crank` with `authority == expected_authority` and
-  `authority_signer == 1`, but gives no supported way to pass the crank account; use the header
-  check only off-chain or in an instruction outside the crank. Legacy `[b"crank", seed]` cranks
-  cannot be tied to a creator from inside the handler.
+  ephemeral account sponsor on the ER), so the PDA check proves who created the crank. To check the header instead
+  (`hydra_api::state::load_crank`, `authority == expected_authority`, `authority_signer == 1`), the
+  handler needs the crank as an account. Hydra's README says not to list it, but `Create` does not
+  reject it, and a meta stored as writable matches the promoted flag. This is untested; prefer the
+  payer-bound PDA check.
 - Base layer: each trigger pays the cranker 10,000 lamports plus `priority_tip` from the crank's
   balance. ER: the flat reward is `0`, so `priority_tip` is the cranker's only incentive.
 - Something must run `hydra-cranker` (published as `@magicblock-labs/hydra-cranker-<platform>` npm

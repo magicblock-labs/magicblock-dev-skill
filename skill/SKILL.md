@@ -52,11 +52,14 @@ transaction/finalize strategies are outside that removal scope. Observe and reco
 scheduled action: scheduling or eventual commit success alone does not prove that any of them ran.
 
 **Commit fees and limits** span the Delegation Program and validator. Without the fee-vault path,
-commits 1–10 are accepted and commit 11 fails with `0xA0000000`. That is a hard cap until the account
-is undelegated; commit-and-undelegate stays allowed so it can exit. Re-delegating resets the count but
-does not make commits free: the delegation deposit (about 2.8M–3.3M lamports) pays a 3M session fee
-plus 1M per commit after the first at undelegation, so nothing is refunded once a session has
-committed twice. With a delegated
+a plain commit fails with `0xA0000000` once the account's commit nonce reaches 10, so commit 11
+fails when commits land one at a time. On 1.x the check reads the last landed nonce, so commits
+queued before earlier ones land are not counted yet; 2.0 counts queued commits. That is a hard cap
+until the account is undelegated; commit-and-undelegate stays allowed so it can exit. Re-delegating resets the count but
+does not make commits free: the delegation deposit pays a 3M session fee plus 1M per commit after the
+first at undelegation. For short seeds without actions the deposit is about 2.8M–3.3M lamports, so
+nothing is refunded once a session has committed twice; longer seeds or actions raise the deposit
+and can leave a refund. With a delegated
 payer and validator-scoped `magic_fee_vault`, commit 26 onward debits `1_000_000` lamports per
 committed account on the live validators (`8886db2`; the `v1.1.1` tag charged `100_000`). The live
 validators refuse to commit an account larger than 10,240 bytes, so do not delegate accounts you will
