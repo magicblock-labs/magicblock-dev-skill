@@ -14,7 +14,7 @@ the scheduler applies it asynchronously. Product logic must distinguish **reques
 - [Design for retries and failure](#design-for-retries-and-failure)
 - [Validation checklist](#validation-checklist)
 - [Hydra cranks](#hydra-cranks)
-- [Validator 2.0 (release candidate, not live)](#validator-20-release-candidate-not-live)
+- [Validator 2.0 (Hydra, devnet-us)](#validator-20-hydra-devnet-us)
 
 ## When to use
 
@@ -44,15 +44,17 @@ scheduled instruction safely detect terminal state.
 
 ## Current program surface
 
-Public ERs run validator `1.1.1` (verified 2026-11-13 with `getVersion`), whose built-in scheduler
-executes `MagicBlockInstruction::ScheduleTask` on the Magic program. Build the CPI with the SDK's
+Every public ER except devnet-us runs the 1.x line (`getVersion` reports `magicblock-core 1.1.1`,
+commit `8886db2`; verified 2026-11-19), whose built-in scheduler executes
+`MagicBlockInstruction::ScheduleTask` on the Magic program. devnet-us runs 2.0; see
+[Validator 2.0](#validator-20-hydra-devnet-us). Build the CPI with the SDK's
 `crank` feature; the `crank` module does not exist without it:
 
 ```toml
 # Anchor 1.x
-ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "crank"] }
-# Anchor >=0.28,<1.0: use this line instead
-# ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor-compat", "crank"] }
+ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "crank"] }
+# Anchor >=0.28,<1.0: use this line instead (0.18.x and earlier; 0.20 removed anchor-compat)
+# ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor-compat", "crank"] }
 ```
 
 Keep only the line that matches the program's existing Anchor version; enabling both `anchor` and
@@ -71,8 +73,9 @@ instruction's accounts, and `ScheduleTaskArgs`. In SDK 0.17 both CPIs are marked
 
 Do not copy the older direct `magicblock-magic-program-api = "0.10.1"` + `bincode` setup with the
 signer code below: `0.10.1` has no `crank_signer_pda` function (only a global `CRANK_SIGNER`
-constant), and SDK 0.17.3 still depends on `0.10.1`. The per-authority `crank_signer_pda` exists from
-`0.11` (latest `1.1.1`). The argument types are signed 64-bit integers:
+constant), and SDK 0.17.3 and 0.18.0 still depend on `0.10.1`. The per-authority `crank_signer_pda`
+exists from `0.11` through `1.1.1`; crates.io latest `2.0.0` is the validator 2.0 API, which removed
+it. The argument types are signed 64-bit integers:
 
 ```rust
 pub struct ScheduleTaskArgs {
@@ -87,8 +90,9 @@ The cancel surface is `MagicBlockInstruction::CancelTask { task_id }` (`CancelCr
 unchanged in `magicblock-magic-program-api` `1.1.1`. Verify the exact account list against
 `crank-counter/anchor` and the target validator before copying an instruction builder.
 
-Schedule and cancel transactions go to the ER and use an ER blockhash. Use `skipPreflight: true` only
-when that ER cannot simulate the scheduler CPI faithfully, then inspect execution logs. The scheduled
+Schedule and cancel transactions go to the ER and use an ER blockhash. Keep preflight on: on the ER,
+`skipPreflight: true` does not skip a simulation, it only makes `sendTransaction` return before
+execution and hide the error. If you skip it, check the ER signature status and logs. The scheduled
 inner instruction also executes in that ER.
 
 ## Authorization and identity
@@ -105,8 +109,8 @@ inner instruction also executes in that ER.
   signature. The only signer a scheduled instruction can carry is the crank signer PDA,
   `crank_signer_pda(&task_authority)`: seeds `[b"crank-executor", task_authority]` under
   `CRANK_PROGRAM_ID` (`Crank11111111111111111111111111111111111111`). The function is
-  `magicblock_magic_program_api::pda::crank_signer_pda` from `0.11`; with SDK 0.17.3 (which pins
-  `0.10.1`), derive it inline with `Pubkey::find_program_address(&[b"crank-executor",
+  `magicblock_magic_program_api::pda::crank_signer_pda` from `0.11`; with SDK 0.17.3 or 0.18.0 (which
+  pin `0.10.1`), derive it inline with `Pubkey::find_program_address(&[b"crank-executor",
   authority.as_ref()], &CRANK_PROGRAM_ID).0`.
 - The scheduler signs for that PDA only when the program lists it. Add
   `AccountMeta::new_readonly(crank_signer_pda(&authority), true)` to the scheduled inner instruction's
@@ -172,7 +176,8 @@ checklist items above that don't need a live scheduler (see
 [local-development.md](local-development.md#magicsvm) and the example's `tests-magicsvm-rs/`); it does
 not model Hydra or validator 2.0.
 
-Pinned scheduler source (validator `v1.1.1`, the live version; `master` is now the 2.0 line):
+Pinned scheduler source (validator `v1.1.1`; the live 1.x ERs run V1 head `8886db2`, where the
+crank-signer and task-ID rules above were re-tested on 2026-11-19; `master` is the 2.0 line):
 [inner signer validation](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/programs/magicblock/src/schedule_task/mod.rs) and
 [scheduled execution](https://github.com/magicblock-labs/magicblock-validator/blob/v1.1.1/programs/magicblock/src/schedule_task/process_execute_task.rs).
 
@@ -193,15 +198,25 @@ top-level, not through CPI.
 - Scheduled instructions cannot carry signer metas. A preceding `Trigger` alone is not
   authorization: anyone can create and trigger their own crank that schedules your instruction. A
   handler that needs crank-only authority must take the instructions sysvar and reject unless
-  `ix[k-1]` has the Hydra program ID, the `Trigger` discriminator, and, as its first account, the
-  expected crank PDA. Derive the expected PDA with the seeds your crank was created with: the
+  `ix[k-1-j]` has the Hydra program ID, the `Trigger` discriminator, and, as its first account, the
+  expected crank PDA, where `j` is the handler's 0-based position in its crank's scheduled list.
+  The cranker sends `Trigger` and then every scheduled instruction contiguously and in order, and
+  `Trigger` byte-matches that whole run against the stored template, so `ix[k-1]` is the `Trigger`
+  only for the first scheduled instruction. Check the fixed position `j` your program scheduled the
+  handler at; do not scan back to the nearest `Trigger`, because a cranker can append unbound
+  instructions after the scheduled run. Derive the expected PDA with the seeds your crank was created with: the
   ephemeral program accepts both the payer-bound `[b"crank", payer, seed]` (preferred) and the
   legacy `[b"crank", seed]`; the deployed base program supports only the legacy seeds until it is
-  redeployed. Do not pass the crank PDA as an account of the scheduled instruction (it is writable in
-  `Trigger`, so the crank could never match).
-- When the schedule's creator matters, also load the crank header (`hydra_api::state::load_crank`)
-  and require `authority == expected_authority` and `authority_signer == 1`; with
-  `authority_signer == 0` the authority is stored only for cancellation and proves nothing.
+  redeployed. Cranks that the 2.0 validator creates from `ScheduleTask` use fixed legacy seeds and the
+  validator as header authority; see [Validator 2.0](#validator-20-hydra-devnet-us). A read-only crank meta in the scheduled instruction can never match, because `Trigger`
+  makes the crank writable for the whole transaction.
+- When the schedule's creator matters, use the payer-bound seeds and derive the expected PDA from
+  the expected payer: the payer must sign `Create` (it funds the account on base, and it is the
+  ephemeral account sponsor on the ER), so the PDA check proves who created the crank. To check the header instead
+  (`hydra_api::state::load_crank`, `authority == expected_authority`, `authority_signer == 1`), the
+  handler needs the crank as an account. Hydra's README says not to list it, but `Create` does not
+  reject it, and a meta stored as writable matches the promoted flag. This is untested; prefer the
+  payer-bound PDA check.
 - Base layer: each trigger pays the cranker 10,000 lamports plus `priority_tip` from the crank's
   balance. ER: the flat reward is `0`, so `priority_tip` is the cranker's only incentive.
 - Something must run `hydra-cranker` (published as `@magicblock-labs/hydra-cranker-<platform>` npm
@@ -211,21 +226,38 @@ top-level, not through CPI.
   and the payer-bound crank PDA (#30) in `hydra-api` 0.2.x are not live on base. Do not use
   `crank::hydra::base` against the deployed base program until it is redeployed.
 
-## Validator 2.0 (release candidate, not live)
+## Validator 2.0 (Hydra, devnet-us)
 
-Validator `v2.0.0-rc.3` (draft prerelease, no published binaries) replaces the built-in scheduler with
-Hydra. When 2.0 ships:
+Validator 2.0 is released (`v2.0.0` 2026-11-16; `v2.0.2` is GitHub Latest and npm `latest` is
+`2.0.1` on 2026-11-19). devnet-us runs it (`getVersion` reports `core 2.0.0`, commit `9456c18`), and
+the devnet router can place delegations there. It replaces the built-in scheduler with Hydra.
+Verified against `9456c18` on 2026-11-19:
 
 - `ScheduleTask` is forwarded to a `hydra-ephemeral` crank. `crank_signer_pda` and `ExecuteCrank` are
   removed (`ExecuteCrank` fails with "crank execution is handled by hydra"), and any signer meta in a
-  scheduled instruction is rejected. Privileged handlers must authenticate the preceding Hydra `Trigger`
-  and its crank (program ID, discriminator, expected crank PDA, and the crank header's `authority` /
-  `authority_signer`), as described in [Hydra cranks](#hydra-cranks). Checking only that a `Trigger`
-  precedes the handler, which is all the `crank-counter` example comment describes, is not enough.
-- The crank PDA is derived from `authority` and `task_id`, so task IDs are scoped per authority and
-  the collision guidance above no longer applies.
-- Intervals round up to whole slots (minimum one), and cancelling a crank that doesn't exist fails.
-- Tasks fire only while a `hydra-cranker` runs; locally, `mb-stack --cranker` with
+  scheduled instruction is rejected. The 1.1.1 pattern above (a read-only `crank_signer_pda` signer
+  meta) therefore fails `ScheduleTask` with `MissingRequiredSignature`.
+- Privileged handlers must authenticate the Hydra `Trigger` at their fixed position and its crank
+  (program ID, discriminator, and expected crank PDA), as described in
+  [Hydra cranks](#hydra-cranks). Checking only that a `Trigger` precedes the handler, which is all the
+  `crank-counter` example comment describes, is not enough.
+- A crank the validator creates from `ScheduleTask` uses the legacy unscoped PDA
+  `[b"crank", sha256(task_authority ‖ task_id.to_le_bytes())]` under `eHyd5…`
+  (`hydra_api` `ephemeral::find_crank_pda`), not the payer-bound form. Its header `authority` is the
+  ER validator identity (the sponsor), `authority_signer == 1`, and `priority_tip == 0`. Derive the
+  expected PDA from those seeds and expect the validator identity as header authority. A handler that
+  requires its own program authority there rejects every validator-created crank. The legacy seeds do
+  not bind the sponsor, so whether a third party can pre-create a crank at that address is unverified;
+  do not rely on the PDA check alone.
+- Task IDs are namespaced per authority (the PDA hashes the authority and `task_id`), so the collision
+  guidance above no longer applies.
+- Intervals round up to whole slots (minimum one).
+- Cancelling a task that was never scheduled succeeds on the ER. The Hydra cancel that the scheduler
+  sends afterwards is what fails, asynchronously and invisibly to the caller, so observe removal as on
+  1.1.1.
+- Tasks fire only while a `hydra-cranker` runs, and validator-created cranks pay it no tip. Whether
+  MagicBlock runs one for devnet-us is unconfirmed. Locally, use `mb-stack --cranker` with
   `MB_STACK_CRANKER_KEYPAIR` set to a keypair funded on the ER.
 
-Keep the `1.1.1` model above for live ERs until the target validator reports 2.0 in `getVersion`.
+Keep the `1.1.1` model above for ERs that report `magicblock-core 1.1.1`. Check `getVersion` on the
+target ER: 2.0 reports its version under `core`.

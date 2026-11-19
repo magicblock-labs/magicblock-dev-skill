@@ -19,18 +19,22 @@ updates state.
 
 ## Dependencies
 
-In the SDK v0.17.3 snapshot verified 2026-11-13, VRF is exposed through the
+In SDK 0.17 and later (snapshot `0.18.0`, verified 2026-11-19), VRF is exposed through the
 main SDK behind its `vrf` feature: `ephemeral_rollups_sdk::vrf` and
 `anchor::{vrf, vrf_callback}` do not exist without it. Anchor programs do not need a direct
 `ephemeral-vrf-sdk` dependency (the SDK re-exports `ephemeral-vrf-sdk` at the same version).
 
 ```toml
 [dependencies]
-ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor", "vrf"] }
+ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor", "vrf"] }
 ```
 
 Use the scoped API below: `ephemeral_rollups_sdk::vrf`,
-`create_request_randomness_ix`, `#[vrf]`, and `#[vrf_callback]`.
+`create_request_randomness_ix_const`, `#[vrf]`, and `#[vrf_callback]`.
+
+Do not use SDK `0.20.0` (crates.io latest, the validator 2.0 line) for VRF: `#[vrf]` does not compile
+there (`error[E0433]: cannot find slot_hashes in sysvar`, because its required anchor-lang 1.2.2 pulls
+solana-program 4.0). An unpinned `cargo add ephemeral-rollups-sdk` installs 0.20.0.
 
 **The request function names swapped in SDK 0.17.0.** In 0.16.x, `create_request_randomness_ix` was
 the deprecated *legacy global-identity* request and `create_request_scoped_randomness_ix` was the
@@ -39,14 +43,21 @@ is the *scoped* regular-priority request, and the legacy global-identity request
 `create_request_legacy_randomness_ix` (deprecated). Code that called `create_request_randomness_ix`
 on 0.16 compiles on 0.17 but switches to the scoped identity, so its callback must validate the scoped
 identity (`#[vrf_callback]`). `create_request_high_priority_scoped_randomness_ix` is unchanged.
-Unreleased SDK `main` (PR #301) deprecates `create_request_randomness_ix` in favour of
-`create_request_randomness_ix_const`; it is not in 0.17.3.
+SDK `0.18.0` (PR #301) deprecates `create_request_randomness_ix` and
+`create_request_high_priority_scoped_randomness_ix` in favour of `create_request_randomness_ix_const`
+and `create_request_high_priority_scoped_randomness_ix_const`. These take the requester identity as a
+compile-time constant, `vrf::consts::program_identity_pubkey(&crate::ID)`, instead of deriving it at
+runtime. The old names still compile on 0.18 with a deprecation warning; on 0.17.x use them without
+`_const`.
 
 Reference example: `magicblock-engine-examples/rewards-delegated-vrf/anchor`
-(`create_request_high_priority_scoped_randomness_ix` with `#[vrf_callback]`). Do not copy the VRF
-callback in `gachapon-example` or `00-LEGACY_EXAMPLES/roll-dice`: both trust the hardcoded legacy
-global identity `9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`, the pattern fixed as exploitable in
-`rewards-delegated-vrf` (examples PR #134).
+(`create_request_high_priority_scoped_randomness_ix` with `#[vrf_callback]`; on 0.18 use the
+`_const` variant). Do not copy the VRF callback in `gachapon-example` or
+`00-LEGACY_EXAMPLES/roll-dice`: both trust the hardcoded legacy global identity
+`9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`, which examples PR #134 removed from
+`rewards-delegated-vrf`. That check rejects every scoped `#[vrf]` fulfillment. PR #134 called it
+exploitable; on the deployed VRF program (tested 2026-11-19) the known attack paths fail closed, but
+the pattern is deprecated.
 
 ## Imports
 
@@ -55,17 +66,21 @@ use ephemeral_rollups_sdk::{
     anchor::{vrf, vrf_callback},
     vrf::{
         self,
-        instructions::{create_request_randomness_ix, RequestRandomnessParams},
+        consts::program_identity_pubkey,
+        instructions::{create_request_randomness_ix_const, RequestRandomnessParams},
         types::SerializableAccountMeta,
     },
 };
+
+// Requester identity PDA, derived at compile time (SDK 0.18+).
+const PROGRAM_IDENTITY: Pubkey = program_identity_pubkey(&crate::ID);
 ```
 
 ## Request Randomness
 
 ```rust
 pub fn roll_dice(ctx: Context<DoRollDiceCtx>, client_seed: u8) -> Result<()> {
-    let ix = create_request_randomness_ix(RequestRandomnessParams {
+    let params = RequestRandomnessParams {
         payer: ctx.accounts.payer.key(),
         oracle_queue: ctx.accounts.oracle_queue.key(),
         callback_program_id: ID,
@@ -80,7 +95,8 @@ pub fn roll_dice(ctx: Context<DoRollDiceCtx>, client_seed: u8) -> Result<()> {
         // Extra args forwarded to the callback
         callback_args: Some(vec![client_seed]),
         ..Default::default()
-    });
+    };
+    let ix = create_request_randomness_ix_const(params, PROGRAM_IDENTITY);
 
     ctx.accounts
         .invoke_signed_vrf(&ctx.accounts.payer.to_account_info(), &ix)?;
@@ -182,12 +198,14 @@ Pinocchio `roll-dice` example in the engine examples repo.
 ## Request Lifecycle and Recovery
 
 Program behaviour, verified 2026-11-13 against SolanaVrf v1.0 (`solana-vrf` commit `4c6c97d`, the
-build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged):
+build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged). The lifecycle,
+fees, and TTL were re-run on the deployed mainnet and devnet binaries on 2026-11-19:
 
-- A request becomes purgeable `QUEUE_TTL_SECONDS` = 120 seconds of wall-clock time after its own
-  creation timestamp. Expiry does not invalidate it: `ProvideRandomness` does not check request age, so
+- A request becomes purgeable 121–124 seconds after creation (the queue clock); the purge itself runs later. `QUEUE_TTL_SECONDS` is 120, but
+  `created_at` is stored in 4-second units (a `u16`, which wraps about every 72.8 hours), so the cut-off
+  depends on rounding. Expiry does not invalidate it: `ProvideRandomness` does not check request age, so
   the oracle can still fulfill it until the queue's oracle runs `PurgeExpiredRequests`, which it does
-  on its own retry schedule rather than at exactly 120 seconds. A purged request's fee goes to the
+  on its own retry schedule rather than at a fixed time. A purged request's fee goes to the
   oracle; there is no refund. Fees
   are `VRF_LAMPORTS_COST` 500,000 lamports (regular) and `VRF_HIGH_PRIORITY_LAMPORTS_COST` 800,000
   (high priority); the delegated ephemeral queue is fee-exempt.
@@ -198,7 +216,7 @@ build deployed on Mainnet and Devnet; program ID, queues, and PDAs are unchanged
   programs. Scoped requests (the default in SDK 0.17) skip this check and may pass other program
   accounts to the callback.
 
-A "timed out" request is not final after 120 seconds. If the application lets the user retry, record
+A "timed out" request is not final after about two minutes. If the application lets the user retry, record
 the new request as current and have the callback reject any fulfillment for a superseded request (match
 the request's identity, for example a stored request seed or pending-request ID), so a late callback
 for the old request and the retry cannot both settle.
@@ -240,7 +258,7 @@ or the real oracle, so keep a Devnet check for those.
 - `caller_seed` adds client-side entropy; `callback_args` forwards extra data to the callback.
 - Treat request acceptance and callback fulfillment as separate observable states.
 - Bind one callback to one request and make its economic effects idempotent.
-- Requests become purgeable after 120 seconds and are not refunded once purged, but can still be
+- Requests become purgeable 121–124 seconds after creation and are not refunded once purged, but can still be
   fulfilled until the purge runs; reject late callbacks for superseded requests. Legacy requests
   reject non-allowlisted program accounts in the callback list.
 

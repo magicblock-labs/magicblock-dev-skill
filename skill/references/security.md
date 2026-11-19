@@ -110,6 +110,9 @@ are application policy unless the application explicitly implements them.
 - Treat an SPL token delegate as a separate authority. Bound and revoke its allowance independently of
   the session token.
 - Treat browser-held session secrets as temporary hot keys and minimize their lifetime and reach.
+- Use `SessionTokenV2`. Anyone can revoke an active V1 `SessionToken` without the authority's
+  signature; an active V2 token needs it. The two versions do not interoperate (see
+  [session-keys.md](session-keys.md#current-integration-shape)).
 
 Sources: [Session Keys security](https://docs.magicblock.gg/pages/tools/session-keys/security),
 [Session Keys lifecycle](https://docs.magicblock.gg/pages/tools/session-keys/how-do-session-keys-work), and
@@ -122,9 +125,14 @@ A successful VRF request is not fulfillment. The application outcome exists only
 - Use the current scoped callback identity for the consuming program. In Anchor, apply
   `#[vrf_callback]`; in native/Pinocchio code, validate `scoped_vrf_identity(program_id)`.
 - Never gate a callback on a hardcoded global VRF identity such as
-  `9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`. Any program can request randomness that is delivered
-  under that identity. `gachapon-example` and `00-LEGACY_EXAMPLES/roll-dice` still use this pattern;
-  examples PR #134 fixed it in `rewards-delegated-vrf`. Do not copy those callbacks.
+  `9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw`. That check rejects every scoped (`#[vrf]`)
+  fulfillment, and adding it as a `vrf_program_identity` field also disables the scoped check
+  `#[vrf_callback]` would inject. Any program can make a legacy request delivered under that
+  identity. On the deployed VRF program (tested 2026-11-19) the two known ways to route such a
+  fulfillment into another program fail (requester identity check, legacy callback allowlist), so the
+  pattern fails closed rather than being exploitable today. It is still deprecated.
+  `gachapon-example` and `00-LEGACY_EXAMPLES/roll-dice` use it; examples PR #134 removed it from
+  `rewards-delegated-vrf`. Do not copy those callbacks.
 - Bind the callback to the expected request and application object, and consume each request once.
 - Prevent user-controlled seed grinding when the result has economic value.
 - Represent pending, fulfilled, timed-out, and superseded requests explicitly so a late callback cannot
@@ -140,18 +148,24 @@ the [Zenith (2025-08) and ARDA (2026-09) VRF audit reports](https://github.com/m
 
 Successful deserialization does not establish that a price is the expected or current price.
 
-- Validate the canonical provider/feed account, expected feed ID and exponent, typed receiver state,
-  `posted_slot > 0`, a sensible value, and freshness. Initialization itself sets
+- Read the ER copy of the feed; the base-layer copies are delegated and stale (mainnet SOL/USD was
+  462 days old on 2026-11-19).
+- Validate the canonical feed account and its owner `PriCems…`, then decode with
+  `try_deserialize_unchecked`: the accounts are `PriceUpdateV3`, so `Account<PriceUpdateV2>` rejects
+  them. Check the expected feed ID (the stored `feed_id` is the account address), `posted_slot > 0`,
+  a sensible value, and freshness. Initialization itself sets
   `VerificationLevel::Full` on a zero-value placeholder with `posted_slot = 0`, so `Full` alone does
   not prove the authenticated MagicBlock republisher posted the current value. The account exposes no
   separate provenance field; these checks establish consistency with the authorized update path, not
   independent verification of an upstream Pyth/Stork proof.
 - Enforce maximum age using the upstream `publish_time`, not only the local posted slot.
-- Validate the value domain and exponent with checked arithmetic.
+- Take the exponent from the feed list: the stored field is `+8` on every feed, and Pyth-convention
+  math on it sold a $1.00 item for 1 lamport. Validate the value domain with checked arithmetic.
 - Treat confidence rules, price-deviation limits, slippage, and stale-feed fallback as explicit
   application policy.
 
-Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real-time-pricing-oracle/blob/81169435300c136c37fe9f991e24c4fc46159c53/program/ephemeral-oracle/programs/ephemeral-oracle/src/lib.rs).
+Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real-time-pricing-oracle/blob/81169435300c136c37fe9f991e24c4fc46159c53/program/ephemeral-oracle/programs/ephemeral-oracle/src/lib.rs),
+plus live account reads and runs of the deployed oracle on 2026-11-19.
 
 ## PER permissions and TEE trust are separate checks
 
@@ -162,7 +176,7 @@ Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real
 - `verifyTeeRpcIntegrity` verifies a fresh genuine TDX quote bound to its challenge, but it does not
   compare MRTD, RTMR, or configuration values to an expected workload allowlist. Perform that separate
   allowlist check when workload identity matters, and do not claim that the helper proves which code is
-  running.
+  running. It resolves `void` and throws on failure; do not test its return value.
 - Authenticate the client through the documented signed challenge flow before trusting a private
   endpoint.
 - Keep application authorization independent from PER visibility. Permission to see or submit against
@@ -171,7 +185,8 @@ Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real
   permission PDA is public, except an SPL or Token-2022 token account, which only its owner can read.
   Mints are public. An account owned by a token program that decodes as neither is denied. A
   permission record is visible only to its members. So reading a delegated token account on a TEE
-  endpoint needs the owner's auth token even without an explicit permission.
+  endpoint needs the owner's auth token even without an explicit permission. MagicSVM `0.3.0` does
+  not model this rule (it shows such a token account to any viewer), so test it against a TEE.
 - Listing the System Program as a member of a program-restricted permission lets any program act
   under it (#101). Do not add it unless that is intended.
 - Expect filtering beyond account reads: signature lists, notifications, and `simulateTransaction`
@@ -183,7 +198,8 @@ Source: [current Pricing Oracle program](https://github.com/magicblock-labs/real
   2026-11-13), and JSON-RPC batch requests are rejected with `400`.
 
 Sources: [PER access control](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/access-control),
-[TEE client verification](https://docs.magicblock.gg/pages/tools/tee/client-implementation), the
+[PER quickstart: authorize](https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/quickstart#4-authorize),
+[SDK `verifyTeeRpcIntegrity` source](https://github.com/magicblock-labs/ephemeral-rollups-sdk/blob/v0.18.0/ts/web3js/src/access-control/verify.ts), the
 query-filtering service v0.2.0 release (default visibility), and probes of `devnet-tee` on 2026-11-13.
 
 ## Private Payments separate authentication, signing, and settlement

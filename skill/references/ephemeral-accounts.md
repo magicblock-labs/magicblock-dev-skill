@@ -101,9 +101,12 @@ on a resize that shrinks it and the remaining rent on close. Create/resize/close
 underfunding, and both refunds can be covered in fast in-process tests (see [local-development.md](local-development.md#magicsvm)). The loss boundary and
 live commit behavior still need a live ER.
 
-Open SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magic` field marker,
+SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magic` field marker,
 `create/init_if_needed/resize/close_magic_<field>`), keeping the current names as deprecated aliases.
-It is unreleased; use the names that the target SDK version exports.
+It shipped in `0.20.0`, the validator 2.0 line. `0.18.0` already exports `#[magic_accounts]` behind
+the optional `magic-accounts` feature, which targets validator 2.0's dedicated Magic Account program
+(see [delegation.md](delegation.md)); its default `ephemeral_accounts` names stay the route for the
+1.x public ERs. Use the names that the target SDK version and validator support.
 
 Working example: `magicblock-engine-examples/ephemeral-account-chats/anchor`.
 

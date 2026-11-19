@@ -2,27 +2,32 @@
 
 ## Dependencies
 
-SDK version example, verified 2026-11-13 against npm `0.17.3`. Keep the target repo's existing
-compatible package line unless the task is an explicit migration; see
-[resources.md](resources.md).
+SDK version example, verified 2026-11-19 against npm `0.18.0` (dist-tag `legacy`). npm `latest` is
+`0.20.0`, the validator 2.0 line, whose `GetCommitmentSignature` throws on the logs of every 1.x ER;
+do not install `@latest` for the public ERs. Keep the target repo's existing compatible package line
+unless the task is an explicit migration; see [resources.md](resources.md#sdk-lines).
 
 ```json
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3"
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0"
   }
 }
 ```
 
 Changes from `0.15.x` to `0.17.3` in this package are additive: Magic ATA helpers, lookup-table size
 calculation, and an optional `template` argument on `getAuthToken` (it must contain `{timestamp}`;
-the TEE also requires `{pubkey}`). The package still depends on `@solana/web3.js ^1.98.0`.
+the TEE also requires `{pubkey}`). The 0.17.3 package depends on `@solana/web3.js ^1.98.0`.
+`GetCommitmentSignature` in `0.18.0` reads both the 1.x log (`ScheduledCommitSent signature`) and the
+2.0 outbox log; 0.17.x reads only the first and 0.20.x only the second (verified against captured
+validator logs on 2026-11-19).
 
 ### `@solana/kit` codebases
 
-`@magicblock-labs/ephemeral-rollups-kit` is the `@solana/kit` 4.x flavour of this SDK, published with
-the same version numbers (latest `0.17.3`). It is not a drop-in replacement: `Connection.create(...)`
+`@magicblock-labs/ephemeral-rollups-kit` is the `@solana/kit` flavour of this SDK, published with
+the same version numbers. `0.17.x` depends on `@solana/kit ^4`; `0.18.0` and `0.20.0` depend on
+`^8`. It is not a drop-in replacement: `Connection.create(...)`
 is async, and its `sendTransaction` defaults to `skipPreflight: true`, so pass
 `skipPreflight: false` to keep preflight. As of 2026-11-13, fixes for escrow PDA derivation
 (escrow top-ups fail with `InvalidSeeds`, PR #310), the `schedulePrivateTransfer` layout (fails with
@@ -145,8 +150,10 @@ tx = await erProvider.wallet.signTransaction(tx);
 const txHash = await erProvider.sendAndConfirm(tx, []);
 ```
 
-These examples preserve preflight. Set `skipPreflight: true` only when the exact ER path has a
-documented simulation incompatibility, then inspect the executed transaction logs.
+These examples preserve preflight. On the ER, preflight is not a simulation: the transaction
+executes and is recorded either way, and `skipPreflight: true` only makes `sendTransaction` return
+before execution, so the execution error is not returned. If you skip it, check the ER signature
+status and logs.
 
 ## Undelegate Transaction (Ephemeral Rollup)
 

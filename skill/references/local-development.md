@@ -28,8 +28,8 @@ The current package family includes `@magicblock-labs/ephemeral-validator`, with
 and required configuration are version-sensitive: inspect the current package metadata and official
 local-development guide before scripting them.
 
-For the known-good `1.1.1` snapshot verified 2026-11-13 (the version public ERs run), start the pinned
-package in a dedicated terminal:
+For the known-good `1.1.1` snapshot verified 2026-11-13 (the 1.x line that every public ER except
+devnet-us runs; npm `latest` is now `2.0.1`), start the pinned package in a dedicated terminal:
 
 ```bash
 npx --yes --package=@magicblock-labs/ephemeral-validator@1.1.1 mb-stack
@@ -43,9 +43,9 @@ flags such as account/program loading belong after `mb-stack`. Use `MB_STACK_ER_
 ER must clone from/commit to a nonlocal base. Stop the supervisor with the terminal interrupt and
 confirm its child processes exit.
 
-Validator 2.0 (release candidate only, not published) adds `mb-stack --vrf`, `--vrf-er`, and
-`--cranker` (with `MB_STACK_CRANKER_KEYPAIR`) to start a VRF oracle and a Hydra cranker. Do not script
-these flags against `1.1.1`.
+Validator 2.0 (released; npm `2.0.1` checked 2026-11-19) adds `mb-stack --vrf`, `--vrf-er`, and
+`--cranker` (with `MB_STACK_CRANKER_KEYPAIR`) to start a VRF oracle and a Hydra cranker. On a local
+2.0 stack, scheduled tasks never fire without `--cranker`. Do not script these flags against `1.1.1`.
 
 Limitations:
 
@@ -84,7 +84,10 @@ Since `0.3.0` it also runs:
 transactions pay normal fees; ER transactions are fee-free.
 
 It does not cover the router, commit limits or fee charging, Hydra cranks, the real VRF oracle, TEE
-attestation, or cross-layer timing. Programs are loaded from their compiled `.so`, so they can use any
+attestation, or cross-layer timing. Its permission-gated reads also miss the TEE's default token-account
+privacy: in `0.3.0` an SPL token account with no permission PDA is readable by any viewer, while a TEE
+shows it only to its owner (checked 2026-11-19). Do not use MagicSVM as evidence of TEE visibility for
+token accounts. Programs are loaded from their compiled `.so`, so they can use any
 SDK version; MagicSVM's own crate pins `ephemeral-rollups-sdk` `0.14.4`, which only matters if the test
 crate shares SDK types with it. It is not evidence that live routing, service scheduling, TEE privacy,
 or cross-layer propagation works.

@@ -20,9 +20,11 @@ Sources of truth:
    `gasless-starter/anchor` (2026-11-11) shows gasless deposits and withdrawals through the Payments
    API (a tip jar that charges a 0.20 USDC relay fee).
 
-SDK version example: Rust `ephemeral-rollups-sdk` **0.17.3** (crates.io latest, verified 2026-11-13)
-with Anchor **1.0.2** for modern Anchor programs. This file's TypeScript snippets use
-`@magicblock-labs/ephemeral-rollups-sdk` **0.17.3** (npm latest, verified 2026-11-13): Magic ATA
+SDK version example: Rust `ephemeral-rollups-sdk` **0.18.0** with Anchor **1.0.2** for modern Anchor
+programs. This file's TypeScript snippets use `@magicblock-labs/ephemeral-rollups-sdk` **0.18.0**
+(npm dist-tag `legacy`, verified 2026-11-19). 0.18.x supports validator 1.x and 2.0; the registries'
+`latest` (0.20.0) is the 2.0-only line, and its `GetCommitmentSignature` fails on every 1.x ER (see
+[resources.md](resources.md#sdk-lines)). Magic ATA
 destinations, the encrypted-destination private base→ephemeral route, and `magicAtaSource`
 withdrawals first shipped in **0.17.1**, so older TS pins build the legacy cleartext routes. Preserve
 an existing target repo's compatible versions unless the task explicitly requests an upgrade; see
@@ -53,7 +55,7 @@ binaries are newer than the `v0.1.0` release tags (`5051c28`).
 | Group-receipt ACL permissions on queued transfers (#129) | ✅ | ✅ |
 | Magic fee vault account for delegated eATA owners on undelegate (#136) | ✅ | ✅ |
 | `CloseLamportsPda` recovery, ix `33` (#139) | ✅ | ✅ |
-| Magic ATA destinations, ix `34`–`36` (#127); also needs ER validators ≥ `v0.16.0` (all public and TEE ERs report `magicblock-core 1.1.1`) | ✅ | ✅ |
+| Magic ATA destinations, ix `34`–`36` (#127); also needs ER validators ≥ `v0.16.0` (the public and TEE ERs run 1.x `8886db2`; devnet-us runs 2.0.0) | ✅ | ✅ |
 | `ExecuteScheduledPrivateTransfer` (ix `30`) checks that its accounts and data match the instruction stored in its Hydra crank (#150) | ✅ | ✅ |
 | Gasless withdrawal with the fee taken from the ER balance, ix `37` (#147) | ✅ | ✅ |
 | Recipient ATA created only by the sponsored private base→base route (#157) | ✅ | ✅ |
@@ -134,7 +136,7 @@ file applies only to Model A.
 {
   "dependencies": {
     "@coral-xyz/anchor": "0.32.1",
-    "@magicblock-labs/ephemeral-rollups-sdk": "0.17.3",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0",
     "@solana/spl-token": "^0.4.14"
   }
 }
@@ -296,9 +298,10 @@ for (const owner of owners) {
     },
   );
   // This reads the ER transaction/logs and extracts the base signature; it
-  // does not confirm that base transaction. Validator 2.0 (release candidates
-  // only on 2026-11-13) replaces that log with an outbox address, which SDK
-  // 0.17.3 cannot parse.
+  // does not confirm that base transaction. Validator 2.0 (devnet-us) replaces
+  // that log with an outbox address: SDK 0.18.x reads both, 0.17.x throws on
+  // 2.0 and 0.20.x throws on 1.x. Only this helper breaks; the undelegation
+  // still lands, and polling the eATA owner on base still works.
   commits.push(await GetCommitmentSignature(sgn, erConnection));
 }
 
@@ -390,7 +393,7 @@ Cargo dependencies (snapshot):
 ```toml
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
 anchor-spl = { version = "1.0.2" }
-ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }
+ephemeral-rollups-sdk = { version = "0.18.0", features = ["anchor"] }
 ```
 
 Calling it from the client — the transaction targets the **ER endpoint**, so
@@ -456,14 +459,15 @@ with its group/client reference and reconcile the total amount.
 
 `DepositAndQueueTransfer` (ix `16`) also accepts an optional permission-account pair for the group
 receipt (#129). Pass both accounts or neither, because a partial pair fails early. Only the Payments
-API adds the pair. TS SDK 0.17.3 `depositAndQueueTransferIx` builds the 12-account shape without it
-(SDK `main` adds it in #307, unreleased on 2026-11-13). On a program without #158 (mainnet on
-2026-11-13), a failed delivery of a transfer queued without the pair cannot refund: its callback still
-marks the missing permission writable, the ER rejects it (`InvalidWritableAccount`), and the refund is
-rolled back. #158 records `QUEUED_TRANSFER_FLAG_NO_RECEIPT_PERMISSION` on such transfers and gives them
-a 13-account callback that refunds. Until the target cluster runs #158, route queued ephemeral→base
-transfers through the Payments API. Checking beforehand that every recipient has a base token account
-does not make the SDK path safe: the recipient can close or freeze that account after the transfer is
+API and TS SDK ≥ 0.18.0 add the pair: `depositAndQueueTransferIx` builds 14 accounts from 0.18.0
+(#307, released in 0.18.0 and 0.20.0) and the 12-account shape without it on 0.17.x. On a program
+without #158 (mainnet on 2026-11-19), a failed delivery of a transfer queued without the pair cannot
+refund: its callback still marks the missing permission writable, the ER rejects it
+(`InvalidWritableAccount`), and the refund is rolled back. With the pair, the mainnet binary's refund
+tests pass. #158 records `QUEUED_TRANSFER_FLAG_NO_RECEIPT_PERMISSION` on such transfers and gives them
+a 13-account callback that refunds. Until the target cluster runs #158, build queued ephemeral→base
+transfers with TS SDK 0.18.x (0.20.x only against validator 2.0, because its `GetCommitmentSignature` fails on 1.x) or the Payments API, not 0.17.x. Checking beforehand that every
+recipient has a base token account does not make the 0.17.x path safe: the recipient can close or freeze that account after the transfer is
 queued, and the failed delivery's refund is still rolled back.
 
 Who creates the recipient's base token account (#157):
@@ -678,14 +682,16 @@ receipts close after all callbacks, so they are execution coordination—not dur
   one transaction is flaky.
 - **Wait for every undelegation commit before withdrawing** — withdraw runs on
   base and requires the eATA to be program-owned again; racing a pending
-  commit fails with `InvalidAccountOwner`. Use `GetCommitmentSignature` on the
-  ER signature, then confirm that signature on the base connection.
+  commit fails with `InvalidAccountOwner`. Use `GetCommitmentSignature` (TS SDK
+  0.18.x, which reads both validator lines) on the ER signature, then confirm
+  that signature on the base connection.
 - **Blockhash must come from the connection you send to** — ER transactions
   need `erConnection.getLatestBlockhash()`; mixing endpoints produces
   blockhash-not-found or stale-state errors.
 - **Scope `skipPreflight` narrowly** — preserve preflight for supported base delegation/deposit
-  transactions. Use `skipPreflight: true` only for ER transactions with a known simulation
-  incompatibility, and inspect execution logs.
+  transactions. On the ER, `skipPreflight: true` does not skip a simulation: the transaction still
+  executes and is recorded, but `sendTransaction` returns before execution and hides the error.
+  Check the ER signature status and logs when you use it.
 - **Choose each lifecycle builder deliberately** — the default withdrawal is a shuttle flow. The
   legacy flow is explicit `undelegateIx` on the ER, base confirmation of its commit, then
   `withdrawSpl(..., { idempotent: false })` on base. `undelegateIx` has no stored mode to match.
@@ -702,8 +708,8 @@ receipts close after all callbacks, so they are execution coordination—not dur
 - **Queue removal is not payout completion** — a ready item is popped when its action is scheduled.
   Reconcile with receipts, destination state, callbacks, and refunds.
 - **Ephemeral→base recipients need a base token account** — the direct route never creates one. On a
-  cluster without #158, use the Payments API for queued ephemeral→base transfers; a pre-check of the
-  recipient's account is not a substitute, because it can be closed or frozen before delivery.
+  cluster without #158, build queued ephemeral→base transfers with TS SDK 0.18.x (0.20.x only on validator 2.0) or the Payments API
+  (both add the receipt permission pair); a pre-check of the recipient's account is not a substitute, because it can be closed or frozen before delivery.
 - **Do not mix models** — an app program in Model A should never derive eATA or
   vault PDAs; a Model B contract must not assume canonical-ATA balances exist
   on base layer.
