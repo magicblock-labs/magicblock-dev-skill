@@ -23,7 +23,7 @@ Sources of truth:
 SDK version example: Rust `ephemeral-rollups-sdk` **0.18.0** with Anchor **1.0.2** for modern Anchor
 programs. This file's TypeScript snippets use `@magicblock-labs/ephemeral-rollups-sdk` **0.18.0**
 (npm dist-tag `legacy`, verified 2026-11-19). 0.18.x supports validator 1.x and 2.0; the registries'
-`latest` (0.20.0) is the 2.0-only line, and its `GetCommitmentSignature` fails on every 1.x ER (see
+`latest` (0.20.0) is the 2.0-only line, and its `GetCommitmentSignature` fails on every 1.x ER, which today means devnet-tee and mainnet (see
 [resources.md](resources.md#sdk-lines)). Magic ATA
 destinations, the encrypted-destination private base→ephemeral route, and `magicAtaSource`
 withdrawals first shipped in **0.17.1**, so older TS pins build the legacy cleartext routes. Preserve
@@ -55,7 +55,7 @@ binaries are newer than the `v0.1.0` release tags (`5051c28`).
 | Group-receipt ACL permissions on queued transfers (#129) | ✅ | ✅ |
 | Magic fee vault account for delegated eATA owners on undelegate (#136) | ✅ | ✅ |
 | `CloseLamportsPda` recovery, ix `33` (#139) | ✅ | ✅ |
-| Magic ATA destinations, ix `34`–`36` (#127); also needs ER validators ≥ `v0.16.0` (the public and TEE ERs run 1.x `8886db2`; devnet-us runs 2.0.0) | ✅ | ✅ |
+| Magic ATA destinations, ix `34`–`36` (#127); also needs ER validators ≥ `v0.16.0` (devnet-tee and the mainnet ERs run 1.x `8886db2`; devnet-us, devnet-eu, and devnet-as run 2.0.4) | ✅ | ✅ |
 | `ExecuteScheduledPrivateTransfer` (ix `30`) checks that its accounts and data match the instruction stored in its Hydra crank (#150) | ✅ | ✅ |
 | Gasless withdrawal with the fee taken from the ER balance, ix `37` (#147) | ✅ | ✅ |
 | Recipient ATA created only by the sponsored private base→base route (#157) | ✅ | ✅ |
@@ -298,7 +298,7 @@ for (const owner of owners) {
     },
   );
   // This reads the ER transaction/logs and extracts the base signature; it
-  // does not confirm that base transaction. Validator 2.0 (devnet-us) replaces
+  // does not confirm that base transaction. Validator 2.0 (devnet regional ERs) replaces
   // that log with an outbox address: SDK 0.18.x reads both, 0.17.x throws on
   // 2.0 and 0.20.x throws on 1.x. Only this helper breaks; the undelegation
   // still lands, and polling the eATA owner on base still works.

@@ -111,16 +111,17 @@ it explicitly.
 
 ## SDK lines
 
-Registries on **2026-11-19**: crates.io and npm `latest` are `0.20.0` (2026-11-16), the validator
+Registries on **2026-11-24**: crates.io and npm `latest` are `0.20.0` (2026-11-16), the validator
 2.0 line. `0.18.0` (2026-11-18, npm dist-tag `legacy`) supports validator 1.x and 2.0. `cargo add`
-without a version and npm `@latest` therefore install the 2.0 line, while every public ER except
-devnet-us runs 1.x.
+without a version and npm `@latest` therefore install the 2.0 line. On the same date the devnet
+regional ERs (devnet-us, devnet-eu, devnet-as) run 2.0, while devnet-tee and every mainnet ER run
+1.x.
 
 | Line | Validators | Notes |
 |---|---|---|
-| `0.17.x` | 1.x | `GetCommitmentSignature` throws on 2.0 (devnet-us) logs |
-| `0.18.x` | 1.x and 2.0 | Pin for the public ERs. Works with Anchor 1.0.2; keeps `anchor-compat`. Deprecates `create_request_randomness_ix` in favour of `_const`. Ships #307 (receipt permission pair on queued transfers) |
-| `0.20.x` | 2.0 only | anchor-lang ≥ 1.2.2, `magicblock-magic-program-api` `2.0.0`, no `anchor-compat` / `backward-compat` (#317), kit `@solana/kit ^8`. Rust `#[vrf]` fails to compile (`E0433 cannot find slot_hashes in sysvar`). TS `GetCommitmentSignature` throws on 1.x logs. Ships #313 (Magic Accounts names) |
+| `0.17.x` | 1.x | `GetCommitmentSignature` throws on 2.0 (devnet regional ER) logs |
+| `0.18.x` | 1.x and 2.0 | Pin for mainnet, the TEE ERs, or an app that uses both validator lines. Works with Anchor 1.0.2; keeps `anchor-compat`. Deprecates `create_request_randomness_ix` in favour of `_const`. Ships #307 (receipt permission pair on queued transfers) |
+| `0.20.x` | 2.0 only | For new integrations on 2.0 ERs only. anchor-lang ≥ 1.2.2, `magicblock-magic-program-api` `2.0.0`, no `anchor-compat` / `backward-compat` (#317), kit `@solana/kit ^8`. Rust `#[vrf]` fails to compile (`E0433 cannot find slot_hashes in sysvar`). TS `GetCommitmentSignature` throws on 1.x logs. Ships #313 (Magic Accounts names) |
 
 With SDK 0.20, an exact `anchor-lang = "=1.0.2"` fails to resolve, and a caret `"1.0.2"` silently
 resolves anchor-lang 1.2.2. Whether 0.20's Rust CPIs work against a 1.x ER is untested. SDK #307,
@@ -227,7 +228,7 @@ Additional product/tool snapshots verified **2026-11-13**; re-check before insta
 
 | Package | Snapshot | Context |
 |---|---:|---|
-| `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries for the 1.x line that every public ER except devnet-us runs. npm `latest` is `2.0.1` (checked 2026-11-19) |
+| `@magicblock-labs/ephemeral-validator` | `1.1.1` | Local validator/stack binaries for the 1.x line that devnet-tee and every mainnet ER run. npm `latest` is `2.0.3` (checked 2026-11-24) |
 | `@magicblock-labs/magicsvm` (npm), `magicsvm` (crate) | `0.3.0` (2026-11-18) | Fast in-process ER lifecycle, crank, and VRF-callback tests; see [local-development.md](local-development.md#magicsvm) |
 | `hydra-api` (crate) | `0.2.1` | Hydra crank API, re-exported by the SDK `crank` feature |
 | `@magicblock-labs/gum-sdk` | `^3.0.10` | Session Keys client in the current binary-prediction example |

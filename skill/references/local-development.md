@@ -28,8 +28,8 @@ The current package family includes `@magicblock-labs/ephemeral-validator`, with
 and required configuration are version-sensitive: inspect the current package metadata and official
 local-development guide before scripting them.
 
-For the known-good `1.1.1` snapshot verified 2026-11-13 (the 1.x line that every public ER except
-devnet-us runs; npm `latest` is now `2.0.1`), start the pinned package in a dedicated terminal:
+For the known-good `1.1.1` snapshot verified 2026-11-13 (the 1.x line that devnet-tee
+and every mainnet ER run; npm `latest` is now `2.0.3`), start the pinned package in a dedicated terminal:
 
 ```bash
 npx --yes --package=@magicblock-labs/ephemeral-validator@1.1.1 mb-stack

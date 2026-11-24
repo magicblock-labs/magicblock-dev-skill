@@ -106,7 +106,7 @@ SDK PR #313 renames this feature to Magic Accounts (`#[magic_accounts]`, a `magi
 It shipped in `0.20.0`, the validator 2.0 line. `0.18.0` already exports `#[magic_accounts]` behind
 the optional `magic-accounts` feature, which targets validator 2.0's dedicated Magic Account program
 (see [delegation.md](delegation.md)); its default `ephemeral_accounts` names stay the route for the
-1.x public ERs. Use the names that the target SDK version and validator support.
+1.x ERs (devnet-tee and mainnet). Use the names that the target SDK version and validator support.
 
 Working example: `magicblock-engine-examples/ephemeral-account-chats/anchor`.
 

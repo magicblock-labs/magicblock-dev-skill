@@ -10,12 +10,13 @@ fee-vault fee, and deposit/refund amounts were measured on 2026-11-19 by running
 
 - Delegation Program `main` at `0c551fa64cd13d6dabc51dbf6d1575bde2d38067`, the build deployed on
   devnet and mainnet since 2026-11-03 (the deployed binaries, run in program-test)
-- MagicBlock validator `8886db2`, the V1 branch head that every public and TEE ER except devnet-us
-  runs. These ERs report `magicblock-core 1.1.1` through `getVersion`, but `8886db2` is not the
+- MagicBlock validator `8886db2`, the V1 branch head that devnet-tee and every mainnet ER run
+  (checked 2026-11-24). These ERs report `magicblock-core 1.1.1` through `getVersion`, but `8886db2` is not the
   `v1.1.1` tag: it charges `1_000_000` instead of `100_000` per account from commit 26 on the
   fee-vault path, and its no-vault limit also covers `commit_finalize` intents
 
-devnet-us runs validator 2.0 (`core 2.0.0`, `9456c18`). See
+The devnet regional ERs (devnet-us, devnet-eu, devnet-as) run validator 2.0 (`core 2.0.4`,
+`c168204`). See
 [Validator 2.0 changes](#validator-20-changes) before applying these numbers to a 2.0 node.
 
 Do not call commits "free" merely because no lamports move during the scheduling instruction. A
@@ -456,9 +457,10 @@ which still has the `100_000` fee.
 
 ## Validator 2.0 changes
 
-Validator 2.0 is released (`v2.0.2` is GitHub Latest and npm `latest` is `2.0.1` on 2026-11-19).
-devnet-us runs `2.0.0` (`9456c18`); the other public ERs run `8886db2`. Its source changes these
-economics relative to the `v1.1.1` tag:
+Validator 2.0 is released (`v2.0.4` is GitHub Latest and npm `latest` is `2.0.3` on 2026-11-24).
+The devnet regional ERs run `2.0.4` (`c168204`); devnet-tee and the mainnet ERs run `8886db2`. Its
+source changes these economics relative to the `v1.1.1` tag (v2.0.1 through v2.0.4 change no fee
+code):
 
 - The per-account live commit fee after the threshold is `1_000_000` lamports, the value `8886db2`
   already charges.
