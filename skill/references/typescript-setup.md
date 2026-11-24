@@ -4,7 +4,7 @@
 
 SDK version example, verified 2026-11-19 against npm `0.18.0` (dist-tag `legacy`). npm `latest` is
 `0.20.0`, the validator 2.0 line, whose `GetCommitmentSignature` throws on the logs of every 1.x ER;
-do not install `@latest` for the public ERs. Keep the target repo's existing compatible package line
+do not install `@latest` for mainnet or the TEE ERs, which run 1.x. Keep the target repo's existing compatible package line
 unless the task is an explicit migration; see [resources.md](resources.md#sdk-lines).
 
 ```json

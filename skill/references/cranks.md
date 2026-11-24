@@ -14,7 +14,7 @@ the scheduler applies it asynchronously. Product logic must distinguish **reques
 - [Design for retries and failure](#design-for-retries-and-failure)
 - [Validation checklist](#validation-checklist)
 - [Hydra cranks](#hydra-cranks)
-- [Validator 2.0 (Hydra, devnet-us)](#validator-20-hydra-devnet-us)
+- [Validator 2.0 (Hydra)](#validator-20-hydra)
 
 ## When to use
 
@@ -44,10 +44,10 @@ scheduled instruction safely detect terminal state.
 
 ## Current program surface
 
-Every public ER except devnet-us runs the 1.x line (`getVersion` reports `magicblock-core 1.1.1`,
-commit `8886db2`; verified 2026-11-19), whose built-in scheduler executes
-`MagicBlockInstruction::ScheduleTask` on the Magic program. devnet-us runs 2.0; see
-[Validator 2.0](#validator-20-hydra-devnet-us). Build the CPI with the SDK's
+devnet-tee and every mainnet ER run the 1.x line (`getVersion` reports `magicblock-core 1.1.1`,
+commit `8886db2`; verified 2026-11-24), whose built-in scheduler executes
+`MagicBlockInstruction::ScheduleTask` on the Magic program. The devnet regional ERs (devnet-us,
+devnet-eu, devnet-as) run 2.0; see [Validator 2.0](#validator-20-hydra). Build the CPI with the SDK's
 `crank` feature; the `crank` module does not exist without it:
 
 ```toml
@@ -195,6 +195,8 @@ top-level, not through CPI.
 | Ephemeral (crank lives as an ephemeral account on the ER) | `eHyd5BU8QffvHi4GnXwxrK4WpS7pM2x9UGKHBWii7mf` | 2026-08-26 (Mainnet and Devnet) |
 
 - Up to 16 scheduled instructions per crank (`MAX_INSTRUCTIONS`), 32 accounts, 1,024 data bytes.
+  `hydra-api` 0.2.2, which validator `v2.0.4` uses, raises the account limit to 64 per scheduled
+  instruction (hydra #37). Which limit the deployed Hydra program enforces is unverified.
 - Scheduled instructions cannot carry signer metas. A preceding `Trigger` alone is not
   authorization: anyone can create and trigger their own crank that schedules your instruction. A
   handler that needs crank-only authority must take the instructions sysvar and reject unless
@@ -208,7 +210,7 @@ top-level, not through CPI.
   ephemeral program accepts both the payer-bound `[b"crank", payer, seed]` (preferred) and the
   legacy `[b"crank", seed]`; the deployed base program supports only the legacy seeds until it is
   redeployed. Cranks that the 2.0 validator creates from `ScheduleTask` use fixed legacy seeds and the
-  validator as header authority; see [Validator 2.0](#validator-20-hydra-devnet-us). A read-only crank meta in the scheduled instruction can never match, because `Trigger`
+  validator as header authority; see [Validator 2.0](#validator-20-hydra). A read-only crank meta in the scheduled instruction can never match, because `Trigger`
   makes the crank writable for the whole transaction.
 - When the schedule's creator matters, use the payer-bound seeds and derive the expected PDA from
   the expected payer: the payer must sign `Create` (it funds the account on base, and it is the
@@ -226,12 +228,13 @@ top-level, not through CPI.
   and the payer-bound crank PDA (#30) in `hydra-api` 0.2.x are not live on base. Do not use
   `crank::hydra::base` against the deployed base program until it is redeployed.
 
-## Validator 2.0 (Hydra, devnet-us)
+## Validator 2.0 (Hydra)
 
-Validator 2.0 is released (`v2.0.0` 2026-11-16; `v2.0.2` is GitHub Latest and npm `latest` is
-`2.0.1` on 2026-11-19). devnet-us runs it (`getVersion` reports `core 2.0.0`, commit `9456c18`), and
-the devnet router can place delegations there. It replaces the built-in scheduler with Hydra.
-Verified against `9456c18` on 2026-11-19:
+Validator 2.0 is released (`v2.0.0` 2026-11-16; `v2.0.4` is GitHub Latest and npm `latest` is
+`2.0.3` on 2026-11-24). devnet-us, devnet-eu, and devnet-as run it (`getVersion` reports
+`core 2.0.4`, commit `c168204`), and the devnet router can place delegations on them. It replaces
+the built-in scheduler with Hydra. Verified against `9456c18` (`v2.0.0`) on 2026-11-19; v2.0.1
+through v2.0.4 change no scheduling code apart from the `hydra-api` 0.2.2 bump:
 
 - `ScheduleTask` is forwarded to a `hydra-ephemeral` crank. `crank_signer_pda` and `ExecuteCrank` are
   removed (`ExecuteCrank` fails with "crank execution is handled by hydra"), and any signer meta in a
@@ -256,7 +259,7 @@ Verified against `9456c18` on 2026-11-19:
   sends afterwards is what fails, asynchronously and invisibly to the caller, so observe removal as on
   1.1.1.
 - Tasks fire only while a `hydra-cranker` runs, and validator-created cranks pay it no tip. Whether
-  MagicBlock runs one for devnet-us is unconfirmed. Locally, use `mb-stack --cranker` with
+  MagicBlock runs one for the devnet 2.0 ERs is unconfirmed. Locally, use `mb-stack --cranker` with
   `MB_STACK_CRANKER_KEYPAIR` set to a keypair funded on the ER.
 
 Keep the `1.1.1` model above for ERs that report `magicblock-core 1.1.1`. Check `getVersion` on the

@@ -131,19 +131,23 @@ Versions in this skill are known-good snapshots or compatibility markers. Before
 inspect the target repository's manifests, toolchain files, lockfiles, and relevant upstream sources.
 See [resources.md](references/resources.md) for the dated snapshot and source links.
 
-**Validators (checked 2026-11-19).** Validator 2.0 is released: `v2.0.2` is the GitHub Latest
-release and npm `latest` is `2.0.1`. Only devnet-us runs it (`getVersion` reports `core 2.0.0`,
-commit `9456c18`), and the devnet router can place delegations there. The other public and TEE ERs
-report `magicblock-core 1.1.1` but run V1 branch head `8886db2`, not the `v1.1.1` tag. `8886db2`
-differs from the tag in the fee-vault commit fee and in the no-vault limit on `commit_finalize`; see
+**Validators (checked 2026-11-24).** Validator 2.0 is released: `v2.0.4` is the GitHub Latest
+release and npm `latest` is `2.0.3`. The devnet regional ERs run it: devnet-us, devnet-eu, and
+devnet-as report `core 2.0.4` (commit `c168204`, the `v2.0.4` tag). devnet-tee and every mainnet ER
+(as, as-tyo, eu, sa, us, mainnet-tee) report `magicblock-core 1.1.1` but run V1 branch head
+`8886db2`, not the `v1.1.1` tag. `8886db2` differs from the tag in the fee-vault commit fee and in
+the no-vault limit on `commit_finalize`; see
 [fees-and-commit-economics.md](references/fees-and-commit-economics.md). 2.0 moves scheduled tasks to
 Hydra and changes the commit receipt log ([cranks.md](references/cranks.md),
-[delegation.md](references/delegation.md)). Check `getVersion` on the target ER before relying on
-either behavior: 2.0 reports `core`, 1.x reports `magicblock-core`.
+[delegation.md](references/delegation.md)). This skill's 2.0 behavior was verified on `v2.0.0`
+(`9456c18`); v2.0.1 through v2.0.4 change no scheduling, intent, or fee code. Check `getVersion` on
+the target ER before relying on either behavior: 2.0 reports `core`, 1.x reports `magicblock-core`.
 
-**SDK lines.** Pin `ephemeral-rollups-sdk` (Rust) and `@magicblock-labs/ephemeral-rollups-sdk` (npm,
-dist-tag `legacy`) to `0.18.x` for the public ERs; it supports validator 1.x and 2.0. `0.20.x` is the
-2.0 line (anchor-lang ≥ 1.2.2, no `anchor-compat`, kit `^8`); use it only against 2.0 endpoints. Its
+**SDK lines.** `0.18.x` of `ephemeral-rollups-sdk` (Rust) and `@magicblock-labs/ephemeral-rollups-sdk`
+(npm dist-tag `legacy`) supports validator 1.x and 2.0. Pin it for mainnet and the TEE ERs, for an
+app that uses both 1.x and 2.0 ERs, or to keep older Anchor dependencies. `0.20.x` (npm `latest`) is
+the 2.0 line (anchor-lang ≥ 1.2.2, no `anchor-compat`, kit `^8`); use it for new integrations that
+only target 2.0 ERs, which today means the devnet regional ERs. Its
 Rust `#[vrf]` fails to compile (`E0433` `slot_hashes`), and its TS `GetCommitmentSignature` throws on
 v1 logs. 0.17.x's `GetCommitmentSignature` throws on v2 logs. `cargo add` without a version and npm
 `@latest` resolve to 0.20. See [resources.md](references/resources.md#sdk-lines).

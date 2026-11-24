@@ -6,7 +6,7 @@
 
 SDK version example, verified 2026-11-19 against crates.io `0.18.0`, the line that supports
 validator 1.x and 2.0. crates.io latest `0.20.0` is the 2.0-only line, so `cargo add` without a
-version is wrong for the public ERs; see [resources.md](resources.md#sdk-lines). Before changing a
+version is wrong for mainnet and the TEE ERs, which run 1.x; see [resources.md](resources.md#sdk-lines). Before changing a
 real project, inspect its existing manifests; keep the project's versions unless the task explicitly
 requests an upgrade.
 
@@ -529,7 +529,7 @@ commit-time errors.
 - Use `GetCommitmentSignature` to extract the base signature from ER logs, then
   confirm that returned signature separately on the base connection. Use the TS
   SDK `0.18.x` helper: it reads both the 1.x log and the 2.0 outbox; 0.17.x
-  throws on 2.0 (devnet-us) and 0.20.x throws on every 1.x ER. Base-layer settlement
+  throws on 2.0 (the devnet regional ERs) and 0.20.x throws on 1.x (devnet-tee and mainnet). Base-layer settlement
   transactions are already v1 transactions on devnet and mainnet (checked 2026-11-13), so fetch
   them with `maxSupportedTransactionVersion: 1`; a request with `0` fails with "Transaction version
   (1) is not supported". `@solana/web3.js` 1.98.4's `VersionedMessage.deserialize` rejects v1
@@ -537,7 +537,7 @@ commit-time errors.
   prefer a raw JSON-RPC call or confirming the signature status
 - For PER: delegate only the data PDA, then manage its `EphemeralPermission` on the ER
 
-> **Validator 2.0 (released; devnet-us runs `2.0.0` on 2026-11-19).** The scheduling transaction
+> **Validator 2.0 (released; devnet-us, devnet-eu, and devnet-as run `2.0.4` on 2026-11-24).** The scheduling transaction
 > logs `Outbox for scheduled intent: <address>` instead of
 > `ScheduledCommitSent signature: <sig>`. Find completion with `getSignaturesForAddress(outbox)`
 > then `getTransaction`; SDK `0.18.x` `GetCommitmentSignature` does this. Committed accounts must
