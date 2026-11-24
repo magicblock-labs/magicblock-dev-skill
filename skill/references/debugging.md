@@ -187,12 +187,14 @@ delegation but the selected ER endpoint lacks a delegated, mutable clone.
   accept/connect problem below the JSON-RPC method handler. Check router
   liveness and logs before assuming the method implementation is broken.
 - Commit tracking stopped working: `GetCommitmentSignature` throws although the ER transaction
-  succeeded. The TS SDK line does not match the ER's validator version. Validator 2.0 logs
-  `Outbox for scheduled intent: <address>` where 1.x logged `ScheduledCommitSent signature: <sig>`,
-  and each SDK line reads only some of these logs:
-  - `ScheduledCommitSent signature not found`: SDK 0.17.x on a 2.0 ER.
-  - `Settlement outbox address not found in scheduling logs`: SDK 0.20.x on a 1.x ER.
+  succeeded. Validator 2.0 logs `Outbox for scheduled intent: <address>` where 1.x logged
+  `ScheduledCommitSent signature: <sig>`, and each SDK line reads only some of these logs. Two
+  messages mean the TS SDK line does not match the ER's validator version:
+  - `ScheduledCommitSent signature not found` on a 2.0 ER: SDK 0.17.x.
+  - `Settlement outbox address not found in scheduling logs` on a 1.x ER: SDK 0.20.x.
 
+  On an ER whose version matches the SDK line, the same messages mean the transaction scheduled no
+  commit; check that the signature is the one that scheduled it.
   `@magicblock-labs/ephemeral-rollups-kit` throws the same messages. Run `getVersion` on the ER from
   the router's `fqdn`: 2.0 reports `core`, 1.x reports `magicblock-core`.
 
@@ -201,11 +203,19 @@ delegation but the selected ER endpoint lacks a delegated, mutable clone.
     --data '{"jsonrpc":"2.0","id":1,"method":"getVersion"}'
   ```
 
-  Fix: move to `0.18.0` (npm dist-tag `legacy`) to keep older Anchor/Solana dependencies, or when
-  any ER the app uses still runs 1.x. It reads both log formats. Move to `0.20.0` (`latest`) for a
-  new integration that only uses 2.0 ERs. 0.17.x can upgrade to 0.20.0 directly, with no 0.18 step.
-  The npm packages of both lines have the same dependencies; the Rust crate 0.20 needs
-  anchor-lang ≥ 1.2.2 and drops `anchor-compat`. See [resources.md](resources.md#sdk-lines).
+  Fix for a mismatch: move to `0.18.0` (npm dist-tag `legacy`) to keep older Anchor/Solana
+  dependencies, or when any ER the app uses still runs 1.x. It reads both log formats. Move to
+  `0.20.0` (`latest`) for a new integration that only uses 2.0 ERs. 0.17.x can upgrade to 0.20.0
+  directly, with no 0.18 step. The npm packages of both lines have the same dependencies; the Rust
+  crate 0.20 needs anchor-lang ≥ 1.2.2 and drops `anchor-compat`. See [resources.md](resources.md#sdk-lines).
+
+  Other `GetCommitmentSignature` errors are not a version mismatch, and changing the SDK line does
+  not fix them. `Scheduling transaction created multiple intents` (0.18.x and 0.20.x, on a 2.0 ER)
+  means one transaction scheduled several commits and this helper returns only one signature. On
+  0.20.x, `waitForSettlement(schedulingSignature, erConnection)` (kit: `connection.waitForSettlement`)
+  returns a receipt for each intent; 0.18.x exports no such helper, so schedule one intent per
+  transaction. `Timed out waiting for settlement ...` means the settlement has not landed within
+  the timeout.
 - Commit or undelegate rejected while scheduling: check the log for
   `is too large to be committed` (account data over 10,240 bytes), a Magic ATA rejection, or custom
   errors `0xA0000000`–`0xA0000002`. See the
