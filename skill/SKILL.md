@@ -228,6 +228,8 @@ For `InvalidWritableAccount`, missing private balances, validator mismatch, or
 - Treat base ownership by the delegation program as expected for a delegated account.
 - Base-layer settlement transactions are v1 transactions: fetch them with
   `maxSupportedTransactionVersion: 1`.
+- "Commit tracking stopped working" (`GetCommitmentSignature` throws) means the TS SDK line does not
+  match the ER's validator version: 0.18.x reads 1.x and 2.0, 0.20.x only 2.0, 0.17.x only 1.x.
 - See [debugging.md](references/debugging.md) for the full runbook.
 
 ### 5. Diagnose possible service-side failures
